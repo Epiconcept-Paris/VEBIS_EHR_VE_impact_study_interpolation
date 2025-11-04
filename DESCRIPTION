@@ -11,5 +11,19 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
 Imports: 
+    dplyr,
+    ggplot2,
+    MASS,
     nlsr,
+    purrr,
     R6
+Depends: 
+    R (>= 3.5)
+LazyData: true
+VignetteBuilder: knitr
+Suggests: 
+    gridExtra,
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

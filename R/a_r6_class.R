@@ -370,7 +370,7 @@ DecayModel <- R6::R6Class(
           period_start = min(periods_starts) + 0:(n_weeks - 1) * 7,
           period_end = min(periods_starts) + 0:(n_weeks - 1) * 7 + 6,
           VE = VE,
-          boot_sample = i
+          ve_sample = i
         )
       })
       VE_samples <- do.call(rbind, VE_samples)
@@ -497,7 +497,7 @@ DecayModel <- R6::R6Class(
     #' @importFrom ggplot2 ggplot aes geom_line theme_minimal labs scale_color_brewer
     #' @importFrom dplyr filter
     #' @return ggplot object
-    plot_bootstrap_samples = function(
+    plot_ve_samples = function(
       periods_starts,
       periods_ends,
       n_samples = 5,
@@ -508,7 +508,7 @@ DecayModel <- R6::R6Class(
       validate_parameter_lengths(
         periods_starts = periods_starts,
         periods_ends = periods_ends,
-        function_name = "plot_bootstrap_samples"
+        function_name = "plot_ve_samples"
       )
 
       if (is.null(self$optimization_results)) {
@@ -523,7 +523,7 @@ DecayModel <- R6::R6Class(
 
       # Filter to show only n_samples
       ve_samples_subset <- ve_samples %>%
-        filter(boot_sample %in% 1:n_samples)
+        filter(ve_sample %in% 1:n_samples)
 
       best_params <- self$optimization_results$boot_fit$coefboot[4, ]
       pred <- decay_functions()$logistic(
@@ -533,11 +533,11 @@ DecayModel <- R6::R6Class(
         best_params[3]
       )
       ve <- 1 - exp(pred)
-      plot(ve)
+      # plot(ve)
 
       # Create plot
       p <- ve_samples_subset %>%
-        ggplot(aes(x = period_start, y = VE, color = factor(boot_sample))) +
+        ggplot(aes(x = period_start, y = VE, color = factor(ve_sample))) +
         geom_line(alpha = alpha) +
         theme_minimal() +
         labs(
@@ -739,7 +739,8 @@ DecayModel <- R6::R6Class(
     #' @param season Season
     #' @param outcome Outcome
     #' @param criterion Criterion to use for prediction (default is "aic")
-    #' @importFrom ggplot2 ggplot aes geom_errorbar geom_line geom_point theme_minimal labs scale_color_brewer facet_wrap
+    #' @importFrom ggplot2 ggplot aes geom_errorbar geom_line geom_point theme_minimal labs scale_color_brewer facet_wrap scale_x_date
+    #' @import ggplot2
     #' @return ggplot object
     plot = function(
       params,
