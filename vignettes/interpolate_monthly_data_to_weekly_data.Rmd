@@ -1,0 +1,398 @@
+---
+title: "Interpolate monthly data to weekly data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{interpolate_monthly_data_to_weekly_data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>"
+)
+```
+
+```{r setup}
+library(impactstudy)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+```
+
+## Introduction
+
+This vignette demonstrates an alternative approach to fitting decay models for vaccine effectiveness interpolation using a 3-step strategy: **nlxb** for starting values, **nls** for parameter optimization, and **bootstrap** for covariance matrix estimation. This approach provides more robust parameter estimation and uncertainty quantification compared to the standard optimization approach.
+
+## Understanding the 3-Step Strategy
+
+The 3-step fitting strategy consists of:
+
+1. **Step 1: nlxb** - Uses the `nlsr` package to find good starting values for the parameters
+2. **Step 2: nls** - Uses the standard `nls` function with the starting values from step 1
+3. **Step 3: Bootstrap** - Computes bootstrap samples to estimate the covariance matrix and parameter uncertainty
+
+This approach is particularly useful when dealing with complex decay functions or when the standard optimization approach fails to converge.
+
+## Sample Data
+
+We'll use the same toy dataset provided in the package, containing 8-weeks estimates of vaccine effectiveness (VE) for 12 months.
+
+```{r sample_data}
+data("sample_8_weeks_data")
+
+head(sample_8_weeks_data)
+
+time_parameters <- impactstudy:::build_time_objects(
+    sample_8_weeks_data$date_min,
+    sample_8_weeks_data$date_max
+)
+
+# Total number of weeks in the study
+cat("Study period:", as.character(min(time_parameters$timing$date_min)), "to", as.character(max(time_parameters$timing$date_max)), "\n")
+cat("Total weeks in study:", time_parameters$n_weeks, "\n")
+```
+
+```{r}
+ggplot(sample_8_weeks_data, aes(x = date_min, y = 1 - estimate)) +
+    geom_point() +
+    geom_errorbar(aes(ymin = 1 - CIhigh, ymax = 1 - CIlow)) +
+    theme_minimal()
+```
+
+## Creating Individual Decay Models
+
+```{r}
+nbootstrap <- 100
+seed_to_use <- 666
+```
+
+### Exponential Decay Model
+
+```{r exponential_model}
+# Create exponential model using the R6 class
+exponential_model <- DecayModel$new(
+    name = "exponential",
+    decay_function = exponential_decay(),
+    param_config = list(
+        start = c(VE0 = 0.7, decay_rate = 0.1),
+        lower = c(0.01, 0.001),
+        upper = c(0.99, 1.0),
+        names = c("VE0", "decay_rate")
+    )
+)
+
+# Fit the model using 3-step strategy with custom bootstrap settings
+exponential_result <- exponential_model$fit_3step(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    nboot = nbootstrap, # Number of bootstrap samples
+    seed = seed_to_use # Seed for reproducibility
+)
+
+# View the results
+cat("Exponential Model Results:\n")
+cat("Coefficients:", paste(names(exponential_model$get_optimal_params()),
+    "=", round(exponential_model$get_optimal_params(), 4),
+    collapse = ", "
+), "\n")
+cat("AIC:", exponential_model$get_aic(), "\n")
+cat("BIC:", exponential_model$get_bic(), "\n")
+cat("Covariance Matrix:\n")
+print(exponential_result$covariance_matrix)
+```
+
+### Logistic Decay Model
+
+```{r logistic_model}
+# Create logistic model using the R6 class
+logistic_model <- DecayModel$new(
+    name = "logistic",
+    decay_function = logistic_decay(),
+    param_config = list(
+        start = c(VE0 = 0.7, decay_rate = 0.1, constant = 0.5),
+        lower = c(0.01, 0.001, 0.01),
+        upper = c(0.99, 1.0, 2.0),
+        names = c("VE0", "decay_rate", "constant")
+    )
+)
+
+# Fit the model using 3-step strategy
+logistic_result <- logistic_model$fit_3step(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    nboot = nbootstrap,
+    seed = seed_to_use
+)
+
+# View the results
+cat("Logistic Model Results:\n")
+cat("Coefficients:", paste(names(logistic_model$get_optimal_params()),
+    "=", round(logistic_model$get_optimal_params(), 4),
+    collapse = ", "
+), "\n")
+cat("AIC:", logistic_model$get_aic(), "\n")
+cat("BIC:", logistic_model$get_bic(), "\n")
+cat("Covariance Matrix:\n")
+print(logistic_result$covariance_matrix)
+```
+
+## Visualizing Individual Models
+
+```{r plot_individual_models, fig.width=12, fig.height=4}
+# Plot exponential model
+p1 <- exponential_model$plot_optimal(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    title = "Exponential Decay Model (3-Step)",
+    color = "red",
+    age_group = "65-79",
+    site = "Denmark",
+    season = "2023-2024",
+    outcome = "hosp"
+)
+
+# Plot logistic model
+p2 <- logistic_model$plot_optimal(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    title = "Logistic Decay Model (3-Step)",
+    color = "blue",
+    age_group = "65-79",
+    site = "Denmark",
+    season = "2023-2024",
+    outcome = "hosp"
+)
+# Display plots side by side
+grid.arrange(p1, p2, ncol = 2)
+```
+
+## Comparing Multiple Models
+
+The comparison functions now support both AIC and BIC criteria for model selection:
+
+```{r model_comparison}
+# Use the compare_decay_models function with custom bootstrap settings
+comparison_result <- compare_decay_models(
+    model_names = c("exponential", "logistic"),
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    nboot = nbootstrap,
+    seed = seed_to_use
+)
+
+# View comparison results
+cat("Model Comparison Summary:\n")
+print(comparison_result$summary)
+
+# Find best model based on AIC
+best_model_aic <- get_best_model(comparison_result, criterion = "aic")
+cat("\nBest model based on AIC:", best_model_aic$model_name, "\n")
+cat("Best AIC:", best_model_aic$criterion, "\n")
+
+# Find best model based on BIC
+best_model_bic <- get_best_model(comparison_result, criterion = "bic")
+cat("\nBest model based on BIC:", best_model_bic$model_name, "\n")
+cat("Best BIC:", best_model_bic$criterion, "\n")
+```
+
+## Model Comparison Plot
+
+```{r model_comparison_plot, fig.width=10, fig.height=6}
+# Create comparison plot using BIC criterion
+comparison_plot <- plot_model_comparison(
+    comparison_result = comparison_result,
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    criterion = "aic",
+    age_group = "65-79",
+    site = "Denmark",
+    season = "2023-2024",
+    outcome = "hosp"
+)
+
+print(comparison_plot)
+```
+
+## Building Prediction Datasets
+
+The prediction functions now support criterion selection:
+
+```{r prediction_datasets}
+# Get prediction dataset from the best model (using BIC)
+pred_dataset_bic <- best_model_bic$model$build_prediction_dataset(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    criterion = "bic"
+)
+
+# Get prediction dataset from the best model (using AIC)
+pred_dataset_aic <- best_model_aic$model$build_prediction_dataset(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    criterion = "aic"
+)
+
+# View weekly predictions from BIC-selected model
+cat("Weekly predictions from BIC-selected model (first 10 rows):\n")
+print(head(pred_dataset_bic$weekly_data, 10))
+
+# View 8-weeks predictions from BIC-selected model
+cat("\n8-weeks predictions from BIC-selected model:\n")
+print(pred_dataset_bic$data_8_weeks)
+
+# Compare predictions between AIC and BIC models
+if (best_model_aic$model_name == best_model_bic$model_name) {
+    cat("\nBoth criteria selected the same model, so predictions are identical.\n")
+} else {
+    cat("\nComparing predictions between AIC and BIC selected models:\n")
+    cat("AIC model:", best_model_aic$model_name, "\n")
+    cat("BIC model:", best_model_bic$model_name, "\n")
+
+    # Show difference in weekly predictions
+    weekly_diff <- pred_dataset_aic$weekly_data$predicted_ve - pred_dataset_bic$weekly_data$predicted_ve
+    cat("Mean absolute difference in weekly predictions:", mean(abs(weekly_diff)), "\n")
+}
+```
+
+## VE Uncertainty Visualization
+
+The enhanced R6 class now provides methods to visualize vaccine effectiveness with uncertainty bands and explore individual bootstrap samples:
+
+## Bootstrap-Based Uncertainty Analysis
+
+The new `generate_VE_based_on_boot_fit` method allows us to generate VE samples based on the bootstrap covariance matrix, providing uncertainty quantification:
+
+```{r bootstrap_uncertainty}
+# Generate VE samples based on bootstrap fit
+ve_samples <- best_model_bic$model$generate_VE_based_on_boot_fit(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max
+)
+
+# View the structure of VE samples
+cat("VE samples structure:\n")
+cat("Number of bootstrap samples:", length(unique(ve_samples$boot_sample)), "\n")
+cat("Number of time points per sample:", length(unique(ve_samples$period_start)), "\n")
+cat("Total observations:", nrow(ve_samples), "\n")
+
+# Show first few rows
+cat("\nFirst few rows of VE samples:\n")
+print(head(ve_samples, 10))
+```
+
+
+### VE Summary Statistics
+
+```{r ve_summary}
+# Generate VE summary statistics with confidence intervals
+ve_summary <- best_model_bic$model$generate_VE_summary(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max
+)
+
+# View summary statistics
+cat("VE Summary Statistics (first 10 rows):\n")
+print(head(ve_summary, 10))
+
+# Show overall statistics
+cat("\nOverall VE Statistics:\n")
+cat("Mean VE:", round(mean(ve_summary$VE_mean), 4), "\n")
+cat("Median VE:", round(mean(ve_summary$VE_median), 4), "\n")
+cat("VE Standard Deviation:", round(mean(ve_summary$VE_sd), 4), "\n")
+```
+
+### VE with Uncertainty Bands
+
+```{r ve_uncertainty_plot, fig.width=10, fig.height=6}
+# Plot VE with uncertainty bands
+uncertainty_plot <- best_model_bic$model$plot_VE_with_uncertainty(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    title = "Logistic Model VE with Bootstrap Uncertainty",
+    color = "darkblue",
+    alpha = 0.4,
+    show_points = TRUE
+)
+
+print(uncertainty_plot)
+```
+
+### Individual Bootstrap Samples
+
+```{r bootstrap_samples_plot, fig.width=10, fig.height=6}
+# Plot individual bootstrap samples
+bootstrap_plot <- best_model_bic$model$plot_bootstrap_samples(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    n_samples = 5, # Show 10 bootstrap samples
+    title = "Individual Bootstrap Samples - Logistic Model",
+    alpha = 1
+)
+
+print(bootstrap_plot)
+```
+
+### Comparing Uncertainty Across Models
+
+```{r compare_uncertainty, fig.width=12, fig.height=8}
+# Generate uncertainty plots for both models
+exp_uncertainty <- exponential_model$plot_VE_with_uncertainty(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    title = "Exponential Model VE with Uncertainty",
+    color = "red",
+    alpha = 0.4
+)
+
+log_uncertainty <- logistic_model$plot_VE_with_uncertainty(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max,
+    title = "Logistic Model VE with Uncertainty",
+    color = "blue",
+    alpha = 0.4
+)
+
+# Display plots side by side
+grid.arrange(exp_uncertainty, log_uncertainty, ncol = 2)
+```
+
+## Summary
+
+This vignette illustrated the enhanced 3-step decay function model fitting strategy using the R6 class approach, which now provides:
+
+1. **Robust parameter estimation** through the combination of nlxb, nls, and bootstrap
+2. **Enhanced uncertainty quantification** via bootstrap covariance matrices and VE sampling
+3. **Flexible model comparison** using both AIC and BIC criteria
+4. **Customizable bootstrap settings** with configurable sample size and seed
+5. **Reproducible analysis** through seed control
+6. **Weekly predictions** for more granular analysis
+7. **Easy model management** through the R6 class interface
+8. **VE uncertainty visualization** with confidence bands and bootstrap sample exploration
+9. **Customizable confidence intervals** for different levels of uncertainty quantification
+10. **Comprehensive VE summary statistics** including mean, median, and standard deviation
