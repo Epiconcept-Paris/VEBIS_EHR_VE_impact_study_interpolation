@@ -5,7 +5,7 @@
 
 <!-- badges: start -->
 
-[![R-CMD-check](https://github.com/Epiconcept-Paris/VEBIS_EHR_impact_study/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/Epiconcept-Paris/VEBIS_EHR_impact_study/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/Epiconcept-Paris/VEBIS_EHR_VE_impact_study_interpolation/actions/workflows/formatting_and_check.yml/badge.svg)](https://github.com/Epiconcept-Paris/VEBIS_EHR_VE_impact_study_interpolation/actions/workflows/formatting_and_check.yml)
 <!-- badges: end -->
 
 ## Installation
