@@ -84,7 +84,9 @@ exponential_result <- exponential_model$fit_3step(
     nboot = nbootstrap,
     seed = seed_to_use
 )
+```
 
+```{r, echo = FALSE, eval=TRUE}
 # View the results
 cat("Exponential Model Results:\n")
 cat("Coefficients:", paste(names(exponential_model$get_optimal_params()),
@@ -121,7 +123,9 @@ logistic_result <- logistic_model$fit_3step(
     nboot = nbootstrap,
     seed = seed_to_use
 )
+```
 
+```{r, echo = FALSE, eval=TRUE}
 # View the results
 cat("Logistic Model Results:\n")
 cat("Coefficients:", paste(names(logistic_model$get_optimal_params()),
@@ -237,10 +241,7 @@ print(head(ve_samples, 10))
 uncertainty_plot <- best_model_bic$model$plot_VE_with_uncertainty(
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max,
-    title = "Logistic Model VE with uncertainty",
-    color = "darkblue",
-    alpha = 0.4,
-    show_points = TRUE
+    title = "Logistic Model VE with uncertainty"
 )
 
 print(uncertainty_plot)

@@ -1,5 +1,5 @@
 ## code to prepare `sample_8_weeks_data` dataset goes here
-set.seed(123)
+set.seed(666)
 periods_starts <- structure(
   c(
     19631,
@@ -53,7 +53,7 @@ estimates <- c(
   rnorm(length(periods_ends), 0, 0.05)
 
 log_estimates <- log(estimates)
-se <- runif(length(estimates), 0.05, 0.30)
+se <- runif(length(estimates), 0.05, 0.10)
 
 CIlow <- exp(log_estimates - 1.96 * se)
 CIup <- exp(log_estimates + 1.96 * se)
@@ -65,6 +65,13 @@ sample_8_weeks_data <- data.frame(
   CIlow = CIlow,
   CIhigh = CIup
 )
+
+library(ggplot2)
+ggplot(sample_8_weeks_data, aes(x = date_min, y = 1 - estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = 1 - CIhigh, ymax = 1 - CIlow)) +
+  theme_minimal() +
+  labs(x = "Date", y = "Vaccine Effectiveness")
 
 usethis::use_data(sample_8_weeks_data, overwrite = TRUE)
 checkhelper::use_data_doc("sample_8_weeks_data")
