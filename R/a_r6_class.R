@@ -98,6 +98,12 @@ DecayModel <- R6::R6Class(
     #' @field optimization_results Results from the last optimization
     optimization_results = NULL,
 
+    #' @field nlrob_samples List of nlrob samples
+    nlrob_samples = NULL,
+
+    #' @field ve_summary Summary of VE samples
+    ve_summary = NULL,
+
     #' @description Initialize a specific decay model
     #' @param name Model name
     #' @param decay_function Function that implements the decay model
@@ -148,24 +154,24 @@ DecayModel <- R6::R6Class(
     #' @param ci_up Upper confidence interval bounds (in the HR scale)
     #' @param periods_starts Vector of periods starts
     #' @param periods_ends Vector of periods ends
-    #' @param nboot Number of bootstrap samples (default is 1000)
     #' @param seed Seed for reproducibility (default is 123)
     #' @param maxiteritations Maximum number of iterations for nls (default is 500)
-    #' @param max_number_of_tries Maximum number of tries for bootstrap (default is 5000)
+    #' @param type_of_fit Type of fit (default is "midpoint")
     #' @importFrom stats nls AIC BIC coef
     #' @importFrom nlsr nlxb
+    #' @importFrom robustbase nlrob
     #' @return List with fitting results
-    fit_3step = function(
+    fit_to_determine_bic = function(
       estimate,
       ci_low,
       ci_up,
       periods_starts,
       periods_ends,
-      nboot = 100,
-      max_number_of_tries = 5000,
       seed = 123,
-      maxiteritations = 500
+      maxiteritations = 50,
+      type_of_fit = "midpoint"
     ) {
+      match.arg(type_of_fit, c("midpoint", "average"))
       # Validate parameter lengths
       validate_parameter_lengths(
         estimate = estimate,
@@ -173,7 +179,7 @@ DecayModel <- R6::R6Class(
         ci_up = ci_up,
         periods_starts = periods_starts,
         periods_ends = periods_ends,
-        function_name = "fit_3step"
+        function_name = "fit_to_determine_bic"
       )
 
       # Get period-averaged decay functions
@@ -181,11 +187,15 @@ DecayModel <- R6::R6Class(
 
       # Get the appropriate decay function
       if (self$name == "exponential") {
-        decay_func_period <- decay_functions_period$exponential
+        decay_func_period <- decay_functions_period[[paste0(
+          "exponential_",
+          type_of_fit
+        )]]
       } else if (self$name == "logistic") {
-        decay_func_period <- decay_functions_period$logistic
-      } else if (self$name == "logistic_simple") {
-        decay_func_period <- decay_functions_period$logistic_simple
+        decay_func_period <- decay_functions_period[[paste0(
+          "logistic_",
+          type_of_fit
+        )]]
       } else {
         stop("Unknown model name: ", self$name)
       }
@@ -202,111 +212,47 @@ DecayModel <- R6::R6Class(
         formula_str <- "log_estimate ~ decay_func_period(w_start, nweeks, VE0, decay_rate)"
       } else if (self$name == "logistic") {
         formula_str <- "log_estimate ~ decay_func_period(w_start, nweeks, VE0, decay_rate, constant)"
-      } else if (self$name == "logistic_simple") {
-        formula_str <- "log_estimate ~ decay_func_period(w_start, nweeks, VE0, decay_rate)"
       }
 
       # Create the formula with the decay function in the environment
       formula <- as.formula(formula_str)
 
-      # Step 1: nlxb for starting values
-      nlxb_fit <- nlxb(
-        formula,
+      decay_func_period <<- decay_func_period
+
+      nlrob_fit <- nlrob(
+        as.formula(formula_str),
         data = data.frame(
           log_estimate = log_estimate,
           w_start = timing$diff_start,
           nweeks = n_weeks
         ),
-        start = as.list(self$param_config$start),
-        weights = 1 / se^2,
+        start = self$param_config$start,
         lower = self$param_config$lower,
         upper = self$param_config$upper,
-        control = list(japprox = "jacentral")
+        control = list(maxiter = maxiteritations, warnOnly = TRUE),
+        # weights = 1 / se^2,
+        maxit = maxiteritations,
+        method = "M",
+        algorithm = "port"
       )
 
-      # Step 2: nls with starting values from nlxb
-      start_v <- coef(nlxb_fit)
-      nls_fit <- suppressWarnings(nls(
-        formula,
-        start = start_v,
-        weights = 1 / se^2,
-        lower = self$param_config$lower,
-        upper = self$param_config$upper,
-        data = data.frame(
-          log_estimate = log_estimate,
-          w_start = timing$diff_start,
-          nweeks = n_weeks
-        ),
-        algorithm = "port",
-        control = list(maxiter = maxiteritations, warnOnly = TRUE)
-      ))
-
-      has_converged <- nls_fit$convergence == 0
-      number_of_success_bootstrap_samples <- number_of_tries <- 0
-
-      # Step 3: Bootstrap for covariance matrix
-      boot_nls <- function(nls_tmp) {
-        data2 <- data.frame(
-          log_estimate = log_estimate,
-          w_start = timing$diff_start,
-          nweeks = n_weeks
-        )
-        fitted1 <- fitted(nls_tmp)
-        resid1 <- resid(nls_tmp)
-        var1 <- all.vars(formula(nls_tmp)[[2]])
-        coef_list <- list()
-        rse_list <- list()
-
-        while (
-          number_of_success_bootstrap_samples < nboot &
-            number_of_tries < max_number_of_tries
-        ) {
-          set.seed(seed + number_of_tries)
-          number_of_tries <<- number_of_tries + 1
-          data2[, var1] <- fitted1 +
-            sample(scale(resid1, scale = FALSE), replace = TRUE)
-          nls2 <- suppressWarnings(try(
-            update(nls_tmp, start = as.list(coef(nls_tmp)), data = data2),
-            silent = TRUE
-          ))
-          if (inherits(nls2, "nls")) {
-            if (nls2$convergence == 0) {
-              number_of_success_bootstrap_samples <<- number_of_success_bootstrap_samples +
-                1
-              coef_list[[number_of_success_bootstrap_samples]] <- coef(nls2)
-              rse_list[[number_of_success_bootstrap_samples]] <- summary(
-                nls2
-              )$sigma
-            }
-          }
-        }
-        return(list(
-          coefboot = do.call(rbind, coef_list),
-          rse = do.call(rbind, rse_list)
-        ))
-      }
-      boot_fit <- boot_nls(nls_fit)
-      sample_coefs <- boot_fit$coefboot
-      sample_cov <- cov(sample_coefs)
+      has_converged <- nlrob_fit$status == "converged"
 
       # Create results data frame (similar to optim results for compatibility)
-      result_df <- as.data.frame(t(coef(nls_fit)))
+      result_df <- as.data.frame(t(coef(nlrob_fit)))
       names(result_df) <- self$param_config$names
-      result_df$aic <- AIC(nls_fit)
-      result_df$bic <- BIC(nls_fit)
+      result_df$aic <- AIC(nlrob_fit)
+      result_df$bic <- BIC(nlrob_fit)
       result_df$model <- self$name
 
       # Store the results
       self$optimization_results <- list(
         params = result_df,
-        nlxb_fit = nlxb_fit,
-        nls_fit = nls_fit,
-        boot_fit = boot_fit,
-        covariance_matrix = sample_cov,
-        coefficients = coef(nls_fit),
-        AIC = AIC(nls_fit),
-        BIC = BIC(nls_fit),
-        summary = summary(nls_fit),
+        nls_fit = nlrob_fit,
+        coefficients = coef(nlrob_fit),
+        AIC = AIC(nlrob_fit),
+        BIC = BIC(nlrob_fit),
+        summary = summary(nlrob_fit),
         decay_func = self$decay_function
       )
 
@@ -314,67 +260,130 @@ DecayModel <- R6::R6Class(
     },
 
     #' @description Generate VE based on boot fit
+    #' @param estimate Log estimates (in the HR scale)
+    #' @param ci_low Lower confidence interval bounds (in the HR scale)
+    #' @param ci_up Upper confidence interval bounds (in the HR scale)
     #' @param periods_starts Vector of periods starts
     #' @param periods_ends Vector of periods ends
     #' @param n_weekly_ve_to_generate Number of weekly VE to generate (default is 1000)
+    #' @param type_of_fit Type of fit (default is "midpoint")
+    #' @param seed Seed for reproducibility (default is 123)
     #' @return Matrix of VE samples
     #' @importFrom MASS mvrnorm
-    generate_VE_based_on_boot_fit = function(
+    generate_VE_based_on_resampling = function(
+      estimate,
+      ci_low,
+      ci_up,
       periods_starts,
       periods_ends,
-      n_weekly_ve_to_generate = 1000
+      n_weekly_ve_to_generate = 1000,
+      type_of_fit = "midpoint",
+      seed = 123
     ) {
+      set.seed(seed)
+      match.arg(type_of_fit, c("midpoint", "average"))
       # Validate parameter lengths
       validate_parameter_lengths(
         periods_starts = periods_starts,
         periods_ends = periods_ends,
-        function_name = "generate_VE_based_on_boot_fit"
+        function_name = "generate_VE_based_on_resampling"
       )
 
       if (is.null(self$optimization_results)) {
-        stop("No optimization results available. Run fit_3step() first.")
+        stop(
+          "No optimization results available. Run fit_to_determine_bic() first."
+        )
       }
+
+      generate_8week_sample <- function(log_estimate, sd) {
+        rnorm(n = length(log_estimate), mean = log_estimate, sd = sd)
+      }
+
+      log_estimate <- log(estimate)
+      se <- get_se_from_ci(log(ci_low), log(ci_up))
+      timing <- build_time_objects(periods_starts, periods_ends)$timing
       n_weeks <- build_time_objects(periods_starts, periods_ends)$n_weeks
-      # nboot_samples <- nrow(self$optimization_results$boot_fit$coefboot)
-      parameters_samples <- mvrnorm(
-        n_weekly_ve_to_generate,
-        unlist(self$get_optimal_params()),
-        self$optimization_results$covariance_matrix
-      )
 
-      allowed_lower_bounds <- self$param_config$lower
-      allowed_upper_bounds <- self$param_config$upper
-      parameters_samples <- pmax(parameters_samples, allowed_lower_bounds)
-      parameters_samples <- pmin(parameters_samples, allowed_upper_bounds)
-      parameters_samples_quantiles <- apply(parameters_samples, 2, function(x) {
-        quantile(x, c(0.025, 0.95))
+      eight_weeks_samples <- lapply(1:n_weekly_ve_to_generate, function(i) {
+        generate_8week_sample(log_estimate, se)
       })
-      for (i in 1:ncol(parameters_samples)) {
-        parameters_samples[, i] <- pmax(
-          parameters_samples[, i],
-          parameters_samples_quantiles[1, i]
+
+      fit_1_sample_nlrob <- function(
+        log_estimate,
+        se,
+        timing,
+        n_weeks,
+        model,
+        decay_func_period,
+        correct_se_8weeks = FALSE
+      ) {
+        if (model$name == "exponential" & type_of_fit == "midpoint") {
+          formula_str <- "log_estimate ~ decay_functions_period_avg()$exponential_midpoint(w_start, nweeks, VE0, decay_rate)"
+        } else if (model$name == "logistic" & type_of_fit == "midpoint") {
+          formula_str <- "log_estimate ~ decay_functions_period_avg()$logistic_midpoint(w_start, nweeks, VE0, decay_rate, constant)"
+        } else if (model$name == "exponential" & type_of_fit == "average") {
+          formula_str <- "log_estimate ~ decay_functions_period_avg()$exponential_average(w_start, nweeks, VE0, decay_rate)"
+        } else if (model$name == "logistic" & type_of_fit == "average") {
+          formula_str <- "log_estimate ~ decay_functions_period_avg()$logistic_average(w_start, nweeks, VE0, decay_rate, constant)"
+        }
+
+        nlrob_fit <- suppressWarnings(nlrob(
+          as.formula(formula_str),
+          data = data.frame(
+            log_estimate = log_estimate,
+            w_start = timing$diff_start,
+            nweeks = n_weeks
+          ),
+          start = model$param_config$start,
+          lower = model$param_config$lower,
+          upper = model$param_config$upper,
+          control = list(maxiter = 50, warnOnly = TRUE),
+          # weights = 1 / se^2,
+          maxit = 50,
+          method = "M",
+          algorithm = "port"
+        ))
+
+        weekly_VE <- do.call(
+          model$decay_function,
+          c(list(time_steps = 1:n_weeks), as.list(coef(nlrob_fit)))
         )
-        parameters_samples[, i] <- pmin(
-          parameters_samples[, i],
-          parameters_samples_quantiles[2, i]
+
+        sigma <- summary(nlrob_fit)$Scale
+        if (correct_se_8weeks) {
+          sigma <- sigma * sqrt(8)
+        }
+
+        weekly_VE_as_logHR <- log(1 - weekly_VE)
+        weekly_VE_as_logHR_with_noise <- rnorm(
+          length(weekly_VE_as_logHR),
+          mean = weekly_VE_as_logHR,
+          sd = sigma
         )
+        weekly_VE_with_noise <- 1 - exp(weekly_VE_as_logHR_with_noise)
+
+        weekly_VE_with_noise
       }
 
-      VE_samples <- lapply(seq_len(nrow(parameters_samples)), function(i) {
-        param_list <- as.list(parameters_samples[i, ])
-        VE <- do.call(
-          self$decay_function,
-          c(list(time_steps = 1:n_weeks), param_list)
-        )
-        data.frame(
-          period_start = min(periods_starts) + 0:(n_weeks - 1) * 7,
-          period_end = min(periods_starts) + 0:(n_weeks - 1) * 7 + 6,
-          VE = VE,
-          ve_sample = i
+      fit_1_sample_nlrob_robust <- purrr::possibly(fit_1_sample_nlrob)
+
+      nlrob_samples <- purrr::map(1:n_weekly_ve_to_generate, function(i) {
+        log_estimate <- eight_weeks_samples[[i]]
+        set.seed(seed + i)
+        fit_1_sample_nlrob_robust(
+          log_estimate = log_estimate,
+          se = se,
+          timing = timing,
+          n_weeks = n_weeks,
+          model = self,
+          decay_func_period = decay_func_period,
+          correct_se_8weeks = FALSE
         )
       })
-      VE_samples <- do.call(rbind, VE_samples)
-      return(VE_samples)
+
+      self$nlrob_samples <- nlrob_samples
+
+      return(self$nlrob_samples)
     },
 
     #' @description Generate VE summary statistics from bootstrap samples
@@ -394,30 +403,43 @@ DecayModel <- R6::R6Class(
         periods_ends = periods_ends,
         function_name = "generate_VE_summary"
       )
-
-      if (is.null(self$optimization_results)) {
-        stop("No optimization results available. Run fit_3step() first.")
+      if (is.null(self$nlrob_samples)) {
+        stop(
+          "No nlrob samples available. Run generate_VE_based_on_resampling() first."
+        )
       }
-
       # Generate VE samples
-      ve_samples <- self$generate_VE_based_on_boot_fit(
+      ve_samples <- self$nlrob_samples
+
+      n_weeks <- build_time_objects(
         periods_starts,
         periods_ends
-      )
+      )$n_weeks
+
+      ve_samples <- lapply(seq_len(length(ve_samples)), function(x) {
+        data.frame(
+          period_start = min(periods_starts) + 0:(n_weeks - 1) * 7,
+          VE = ve_samples[[x]],
+          sample = x
+        )
+      })
+      ve_samples <- do.call(rbind, ve_samples)
 
       # Calculate summary statistics
       ve_summary <- ve_samples %>%
-        group_by(period_start) %>%
-        summarise(
-          VE_median = quantile(VE, 0.5),
+        dplyr::group_by(period_start) %>%
+        dplyr::summarise(
+          VE_median = median(VE),
           VE_mean = mean(VE),
           VE_sd = sd(VE),
-          ci_low = quantile(VE, probs[1]),
-          ci_up = quantile(VE, probs[length(probs)]),
+          VE_quantile_025 = quantile(VE, 0.025),
+          VE_quantile_975 = quantile(VE, 0.975),
           .groups = "drop"
         )
 
-      return(ve_summary)
+      self$ve_summary <- ve_summary
+
+      return(self$ve_summary)
     },
 
     #' @description Plot VE with uncertainty bands from bootstrap
@@ -460,7 +482,7 @@ DecayModel <- R6::R6Class(
       # Create plot
       p <- ggplot(ve_summary, aes(x = period_start, y = VE_median)) +
         geom_ribbon(
-          aes(ymin = ci_low, ymax = ci_up),
+          aes(ymin = VE_quantile_025, ymax = VE_quantile_975),
           alpha = alpha,
           fill = color
         ) +
@@ -471,13 +493,112 @@ DecayModel <- R6::R6Class(
           y = "Vaccine Effectiveness",
           title = ifelse(
             is.null(title),
-            paste(self$name, "Model with Bootstrap Uncertainty"),
+            paste(self$name, "model"),
             title
           ),
           subtitle = paste(
             "Ribbon shows",
             paste0(round((probs[length(probs)] - probs[1]) * 100), "%"),
-            "confidence intervals"
+            "prediction intervals"
+          )
+        )
+
+      if (show_points) {
+        p <- p + geom_point(color = color, size = 2)
+      }
+
+      return(p)
+    },
+
+    #' @description Plot VE with uncertainty bands from bootstrap
+    #' @param estimate Log estimates (in the HR scale)
+    #' @param ci_low Lower confidence interval bounds (in the HR scale)
+    #' @param ci_up Upper confidence interval bounds (in the HR scale)
+    #' @param periods_starts Vector of periods starts
+    #' @param periods_ends Vector of periods ends
+    #' @param title Plot title (default is NULL)
+    #' @param color Color for the line and ribbon (default is "blue")
+    #' @param alpha Transparency for the ribbon (default is 0.3)
+    #' @param show_points Whether to show points on the line (default is TRUE)
+    #' @param probs Vector of quantiles for confidence intervals (default is c(0.025, 0.975))
+    #' @importFrom ggplot2 ggplot aes geom_ribbon geom_line geom_point theme_minimal labs
+    #' @return ggplot object
+    plot_VE_with_uncertainty_plus_raw_data = function(
+      estimate,
+      ci_low,
+      ci_up,
+      periods_starts,
+      periods_ends,
+      title = NULL,
+      color = "blue",
+      alpha = 0.3,
+      show_points = TRUE,
+      probs = c(0.025, 0.975)
+    ) {
+      # Validate parameter lengths
+      validate_parameter_lengths(
+        periods_starts = periods_starts,
+        periods_ends = periods_ends,
+        function_name = "plot_VE_with_uncertainty"
+      )
+
+      if (is.null(self$optimization_results)) {
+        stop("No optimization results available. Run fit_3step() first.")
+      }
+
+      # Generate summary statistics
+      ve_summary <- self$generate_VE_summary(
+        periods_starts,
+        periods_ends,
+        probs
+      )
+
+      raw_ve <- data.frame(
+        VE = 1 - estimate,
+        VE_low = 1 - ci_up,
+        VE_high = 1 - ci_low,
+        period_start = periods_starts + 28
+      )
+
+      # Create plot
+      p <- ggplot() +
+        geom_ribbon(
+          data = ve_summary,
+          aes(
+            x = period_start,
+            y = VE_median,
+            ymin = VE_quantile_025,
+            ymax = VE_quantile_975
+          ),
+          alpha = alpha,
+          fill = color
+        ) +
+        geom_line(
+          data = ve_summary,
+          aes(x = period_start, y = VE_median),
+          color = color,
+          linewidth = 1
+        ) +
+        geom_point(data = raw_ve, aes(x = period_start, y = VE)) +
+        geom_errorbar(
+          data = raw_ve,
+          aes(x = period_start, ymin = VE_low, ymax = VE_high),
+          width = 0.1
+        ) +
+        theme_minimal() +
+        labs(
+          x = "Period Start",
+          y = "Vaccine Effectiveness",
+          title = ifelse(
+            is.null(title),
+            paste(self$name, "model"),
+            title
+          ),
+          subtitle = paste(
+            "Ribbon shows",
+            paste0(round((probs[length(probs)] - probs[1]) * 100), "%"),
+            "prediction intervals\n",
+            "Points and error bars show raw data"
           )
         )
 
@@ -497,7 +618,7 @@ DecayModel <- R6::R6Class(
     #' @importFrom ggplot2 ggplot aes geom_line theme_minimal labs scale_color_brewer
     #' @importFrom dplyr filter
     #' @return ggplot object
-    plot_ve_samples = function(
+    plot_bootstrap_samples = function(
       periods_starts,
       periods_ends,
       n_samples = 5,
@@ -508,7 +629,7 @@ DecayModel <- R6::R6Class(
       validate_parameter_lengths(
         periods_starts = periods_starts,
         periods_ends = periods_ends,
-        function_name = "plot_ve_samples"
+        function_name = "plot_bootstrap_samples"
       )
 
       if (is.null(self$optimization_results)) {
@@ -523,7 +644,7 @@ DecayModel <- R6::R6Class(
 
       # Filter to show only n_samples
       ve_samples_subset <- ve_samples %>%
-        filter(ve_sample %in% 1:n_samples)
+        filter(boot_sample %in% 1:n_samples)
 
       best_params <- self$optimization_results$boot_fit$coefboot[4, ]
       pred <- decay_functions()$logistic(
@@ -533,11 +654,11 @@ DecayModel <- R6::R6Class(
         best_params[3]
       )
       ve <- 1 - exp(pred)
-      # plot(ve)
+      plot(ve)
 
       # Create plot
       p <- ve_samples_subset %>%
-        ggplot(aes(x = period_start, y = VE, color = factor(ve_sample))) +
+        ggplot(aes(x = period_start, y = VE, color = factor(boot_sample))) +
         geom_line(alpha = alpha) +
         theme_minimal() +
         labs(
@@ -739,8 +860,7 @@ DecayModel <- R6::R6Class(
     #' @param season Season
     #' @param outcome Outcome
     #' @param criterion Criterion to use for prediction (default is "aic")
-    #' @importFrom ggplot2 ggplot aes geom_errorbar geom_line geom_point theme_minimal labs scale_color_brewer facet_wrap scale_x_date
-    #' @import ggplot2
+    #' @importFrom ggplot2 ggplot aes geom_errorbar geom_line geom_point theme_minimal labs scale_color_brewer facet_wrap
     #' @return ggplot object
     plot = function(
       params,
@@ -1033,8 +1153,8 @@ compare_decay_models <- function(
       names = c("VE0", "decay_rate")
     )
   ),
-  nboot = 100,
-  seed = 123
+  seed = 123,
+  type_of_fit = "midpoint"
 ) {
   # Validate parameter lengths
   validate_parameter_lengths(
@@ -1077,14 +1197,14 @@ compare_decay_models <- function(
     )
 
     # Optimize the model
-    results[[model_name]] <- models[[model_name]]$fit_3step(
+    results[[model_name]] <- models[[model_name]]$fit_to_determine_bic(
       estimate = estimate,
       ci_low = ci_low,
       ci_up = ci_up,
       periods_starts = periods_starts,
       periods_ends = periods_ends,
-      nboot = nboot,
-      seed = seed
+      seed = seed,
+      type_of_fit = type_of_fit
     )
   }
 

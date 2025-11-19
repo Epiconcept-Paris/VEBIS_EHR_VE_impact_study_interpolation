@@ -16,6 +16,10 @@ A class to represent a decay model
 \item{\code{param_config}}{Parameter configuration}
 
 \item{\code{optimization_results}}{Results from the last optimization}
+
+\item{\code{nlrob_samples}}{List of nlrob samples}
+
+\item{\code{ve_summary}}{Summary of VE samples}
 }
 \if{html}{\out{</div>}}
 }
@@ -25,11 +29,12 @@ A class to represent a decay model
 \item \href{#method-DecayModel-new}{\code{DecayModel$new()}}
 \item \href{#method-DecayModel-evaluate}{\code{DecayModel$evaluate()}}
 \item \href{#method-DecayModel-create_nls_formula}{\code{DecayModel$create_nls_formula()}}
-\item \href{#method-DecayModel-fit_3step}{\code{DecayModel$fit_3step()}}
-\item \href{#method-DecayModel-generate_VE_based_on_boot_fit}{\code{DecayModel$generate_VE_based_on_boot_fit()}}
+\item \href{#method-DecayModel-fit_to_determine_bic}{\code{DecayModel$fit_to_determine_bic()}}
+\item \href{#method-DecayModel-generate_VE_based_on_resampling}{\code{DecayModel$generate_VE_based_on_resampling()}}
 \item \href{#method-DecayModel-generate_VE_summary}{\code{DecayModel$generate_VE_summary()}}
 \item \href{#method-DecayModel-plot_VE_with_uncertainty}{\code{DecayModel$plot_VE_with_uncertainty()}}
-\item \href{#method-DecayModel-plot_ve_samples}{\code{DecayModel$plot_ve_samples()}}
+\item \href{#method-DecayModel-plot_VE_with_uncertainty_plus_raw_data}{\code{DecayModel$plot_VE_with_uncertainty_plus_raw_data()}}
+\item \href{#method-DecayModel-plot_bootstrap_samples}{\code{DecayModel$plot_bootstrap_samples()}}
 \item \href{#method-DecayModel-get_optimal_params}{\code{DecayModel$get_optimal_params()}}
 \item \href{#method-DecayModel-get_aic}{\code{DecayModel$get_aic()}}
 \item \href{#method-DecayModel-get_bic}{\code{DecayModel$get_bic()}}
@@ -99,21 +104,20 @@ Formula suitable for nls
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-DecayModel-fit_3step"></a>}}
-\if{latex}{\out{\hypertarget{method-DecayModel-fit_3step}{}}}
-\subsection{Method \code{fit_3step()}}{
+\if{html}{\out{<a id="method-DecayModel-fit_to_determine_bic"></a>}}
+\if{latex}{\out{\hypertarget{method-DecayModel-fit_to_determine_bic}{}}}
+\subsection{Method \code{fit_to_determine_bic()}}{
 Fit the model using 3-step strategy (nlxb -> nls -> bootstrap)
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DecayModel$fit_3step(
+\if{html}{\out{<div class="r">}}\preformatted{DecayModel$fit_to_determine_bic(
   estimate,
   ci_low,
   ci_up,
   periods_starts,
   periods_ends,
-  nboot = 100,
-  max_number_of_tries = 5000,
   seed = 123,
-  maxiteritations = 500
+  maxiteritations = 50,
+  type_of_fit = "midpoint"
 )}\if{html}{\out{</div>}}
 }
 
@@ -130,13 +134,11 @@ Fit the model using 3-step strategy (nlxb -> nls -> bootstrap)
 
 \item{\code{periods_ends}}{Vector of periods ends}
 
-\item{\code{nboot}}{Number of bootstrap samples (default is 1000)}
-
-\item{\code{max_number_of_tries}}{Maximum number of tries for bootstrap (default is 5000)}
-
 \item{\code{seed}}{Seed for reproducibility (default is 123)}
 
 \item{\code{maxiteritations}}{Maximum number of iterations for nls (default is 500)}
+
+\item{\code{type_of_fit}}{Type of fit (default is "midpoint")}
 }
 \if{html}{\out{</div>}}
 }
@@ -145,26 +147,41 @@ List with fitting results
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-DecayModel-generate_VE_based_on_boot_fit"></a>}}
-\if{latex}{\out{\hypertarget{method-DecayModel-generate_VE_based_on_boot_fit}{}}}
-\subsection{Method \code{generate_VE_based_on_boot_fit()}}{
+\if{html}{\out{<a id="method-DecayModel-generate_VE_based_on_resampling"></a>}}
+\if{latex}{\out{\hypertarget{method-DecayModel-generate_VE_based_on_resampling}{}}}
+\subsection{Method \code{generate_VE_based_on_resampling()}}{
 Generate VE based on boot fit
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DecayModel$generate_VE_based_on_boot_fit(
+\if{html}{\out{<div class="r">}}\preformatted{DecayModel$generate_VE_based_on_resampling(
+  estimate,
+  ci_low,
+  ci_up,
   periods_starts,
   periods_ends,
-  n_weekly_ve_to_generate = 1000
+  n_weekly_ve_to_generate = 1000,
+  type_of_fit = "midpoint",
+  seed = 123
 )}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
+\item{\code{estimate}}{Log estimates (in the HR scale)}
+
+\item{\code{ci_low}}{Lower confidence interval bounds (in the HR scale)}
+
+\item{\code{ci_up}}{Upper confidence interval bounds (in the HR scale)}
+
 \item{\code{periods_starts}}{Vector of periods starts}
 
 \item{\code{periods_ends}}{Vector of periods ends}
 
 \item{\code{n_weekly_ve_to_generate}}{Number of weekly VE to generate (default is 1000)}
+
+\item{\code{type_of_fit}}{Type of fit (default is "midpoint")}
+
+\item{\code{seed}}{Seed for reproducibility (default is 123)}
 }
 \if{html}{\out{</div>}}
 }
@@ -241,12 +258,61 @@ ggplot object
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-DecayModel-plot_ve_samples"></a>}}
-\if{latex}{\out{\hypertarget{method-DecayModel-plot_ve_samples}{}}}
-\subsection{Method \code{plot_ve_samples()}}{
+\if{html}{\out{<a id="method-DecayModel-plot_VE_with_uncertainty_plus_raw_data"></a>}}
+\if{latex}{\out{\hypertarget{method-DecayModel-plot_VE_with_uncertainty_plus_raw_data}{}}}
+\subsection{Method \code{plot_VE_with_uncertainty_plus_raw_data()}}{
+Plot VE with uncertainty bands from bootstrap
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{DecayModel$plot_VE_with_uncertainty_plus_raw_data(
+  estimate,
+  ci_low,
+  ci_up,
+  periods_starts,
+  periods_ends,
+  title = NULL,
+  color = "blue",
+  alpha = 0.3,
+  show_points = TRUE,
+  probs = c(0.025, 0.975)
+)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{estimate}}{Log estimates (in the HR scale)}
+
+\item{\code{ci_low}}{Lower confidence interval bounds (in the HR scale)}
+
+\item{\code{ci_up}}{Upper confidence interval bounds (in the HR scale)}
+
+\item{\code{periods_starts}}{Vector of periods starts}
+
+\item{\code{periods_ends}}{Vector of periods ends}
+
+\item{\code{title}}{Plot title (default is NULL)}
+
+\item{\code{color}}{Color for the line and ribbon (default is "blue")}
+
+\item{\code{alpha}}{Transparency for the ribbon (default is 0.3)}
+
+\item{\code{show_points}}{Whether to show points on the line (default is TRUE)}
+
+\item{\code{probs}}{Vector of quantiles for confidence intervals (default is c(0.025, 0.975))}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+ggplot object
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-DecayModel-plot_bootstrap_samples"></a>}}
+\if{latex}{\out{\hypertarget{method-DecayModel-plot_bootstrap_samples}{}}}
+\subsection{Method \code{plot_bootstrap_samples()}}{
 Plot individual bootstrap samples
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{DecayModel$plot_ve_samples(
+\if{html}{\out{<div class="r">}}\preformatted{DecayModel$plot_bootstrap_samples(
   periods_starts,
   periods_ends,
   n_samples = 5,

@@ -23,16 +23,11 @@ library(gridExtra)
 
 ## Introduction
 
-This vignette demonstrates an approach to interpolate weekly data from 8-week data for vaccine effectiveness using a 3-step strategy: **nlxb** for starting values, **nls** for parameter optimization, and **bootstrap** for covariance matrix estimation. 
+This vignette demonstrates an approach to interpolate weekly data from 8-week data for vaccine effectiveness using the following approach:
 
-## Understanding the 3-Step Strategy
-
-The 3-step fitting strategy consists of:
-
-1. **Step 1: nlxb** - Uses the `nlsr` package to find good starting values for the parameters
-2. **Step 2: nls** - Uses the standard `nls` function with the starting values from step 1
-3. **Step 3: Bootstrap** - Uses parametric bootstrap to estimate the covariance matrix and parameter uncertainty
-
+- Generate many (e.g 1000) 8-week VE samples from random normal distribution with mean and standard deviation of the 8-week VE on the log HR scale
+- Fit the model to the 1000 8-week VE samples and store the fitted values as well as the standard deviation of the residuals
+- Add some noise to the fitted values using the standard deviation of the residuals to get the weekly VE samples
 
 ## Sample Data
 
@@ -55,7 +50,6 @@ ggplot(sample_8_weeks_data, aes(x = date_min, y = 1 - estimate)) +
 ## Creating Individual Decay Models
 
 ```{r}
-nbootstrap <- 100
 seed_to_use <- 666
 ```
 
@@ -74,14 +68,12 @@ exponential_model <- DecayModel$new(
     )
 )
 
-# Fit the model using 3-step strategy with custom bootstrap settings
-exponential_result <- exponential_model$fit_3step(
+exponential_result <- exponential_model$fit_to_determine_bic(
     estimate = sample_8_weeks_data$estimate,
     ci_low = sample_8_weeks_data$CIlow,
     ci_up = sample_8_weeks_data$CIhigh,
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max,
-    nboot = nbootstrap,
     seed = seed_to_use
 )
 ```
@@ -94,8 +86,6 @@ cat("Coefficients:", paste(names(exponential_model$get_optimal_params()),
     collapse = ", "
 ), "\n")
 cat("BIC:", exponential_model$get_bic(), "\n")
-cat("Covariance Matrix:\n")
-print(exponential_result$covariance_matrix)
 ```
 
 ### Logistic Decay Model
@@ -113,14 +103,12 @@ logistic_model <- DecayModel$new(
     )
 )
 
-# Fit the model using 3-step strategy
-logistic_result <- logistic_model$fit_3step(
+logistic_result <- logistic_model$fit_to_determine_bic(
     estimate = sample_8_weeks_data$estimate,
     ci_low = sample_8_weeks_data$CIlow,
     ci_up = sample_8_weeks_data$CIhigh,
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max,
-    nboot = nbootstrap,
     seed = seed_to_use
 )
 ```
@@ -133,8 +121,6 @@ cat("Coefficients:", paste(names(logistic_model$get_optimal_params()),
     collapse = ", "
 ), "\n")
 cat("BIC:", logistic_model$get_bic(), "\n")
-cat("Covariance Matrix:\n")
-print(logistic_result$covariance_matrix)
 ```
 
 ## Visualizing Individual Models
@@ -182,7 +168,6 @@ comparison_result <- compare_decay_models(
     ci_up = sample_8_weeks_data$CIhigh,
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max,
-    nboot = nbootstrap,
     seed = seed_to_use
 )
 
@@ -224,41 +209,53 @@ The new `generate_VE_based_on_boot_fit` method allows us to generate VE samples 
 
 ```{r bootstrap_uncertainty}
 # Generate VE samples based on bootstrap fit
-ve_samples <- best_model_bic$model$generate_VE_based_on_boot_fit(
+best_model <- best_model_bic
+ve_samples <- best_model$model$generate_VE_based_on_resampling(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max,
     n_weekly_ve_to_generate = 1000
 )
 
-print(head(ve_samples, 10))
+print(best_model$model$nlrob_samples[[1]])
 ```
 
+### Get summary of VE samples
+
+```{r get_summary_of_ve_samples}
+ve_summary <- best_model$model$generate_VE_summary(
+    periods_starts = sample_8_weeks_data$date_min,
+    periods_ends = sample_8_weeks_data$date_max
+)
+
+print(ve_summary)
+```
 
 ### VE with Uncertainty Bands
 
 ```{r ve_uncertainty_plot, fig.width=10, fig.height=6}
 # Plot VE with uncertainty bands
-uncertainty_plot <- best_model_bic$model$plot_VE_with_uncertainty(
+uncertainty_plot <- best_model$model$plot_VE_with_uncertainty(
     periods_starts = sample_8_weeks_data$date_min,
-    periods_ends = sample_8_weeks_data$date_max,
-    title = "Logistic Model VE with uncertainty"
+    periods_ends = sample_8_weeks_data$date_max
 )
 
 print(uncertainty_plot)
 ```
 
-### Show individual VE samples
 
-```{r some_ve_plot, fig.width=10, fig.height=6}
-# Plot individual bootstrap samples
-some_ve_plot <- best_model_bic$model$plot_ve_samples(
+### VE with Uncertainty Bands plus raw data
+
+```{r ve_uncertainty_plot_plus_raw_data, fig.width=10, fig.height=6}
+ve_uncertainty_plot_plus_raw_data <- best_model$model$plot_VE_with_uncertainty_plus_raw_data(
+    estimate = sample_8_weeks_data$estimate,
+    ci_low = sample_8_weeks_data$CIlow,
+    ci_up = sample_8_weeks_data$CIhigh,
     periods_starts = sample_8_weeks_data$date_min,
-    periods_ends = sample_8_weeks_data$date_max,
-    n_samples = 5,
-    title = "Individual VE Samples - Logistic Model",
-    alpha = 1
+    periods_ends = sample_8_weeks_data$date_max
 )
 
-print(some_ve_plot)
+print(ve_uncertainty_plot_plus_raw_data)
 ```
-

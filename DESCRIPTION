@@ -16,7 +16,8 @@ Imports:
     MASS,
     nlsr,
     purrr,
-    R6
+    R6,
+    robustbase
 Depends: 
     R (>= 3.5)
 LazyData: true
