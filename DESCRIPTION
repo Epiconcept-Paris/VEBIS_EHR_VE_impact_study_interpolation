@@ -1,6 +1,6 @@
 Package: VEinterpolation
 Title: VE interpolation package
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: c( 
     person("Yohann", "Mansiaux", , "y.mansiaux@epiconcept.fr", role = c("aut", "cre")),
     person("Alexandre", "Blake", , "a.blake@epiconcept.fr", role = c("aut")),
