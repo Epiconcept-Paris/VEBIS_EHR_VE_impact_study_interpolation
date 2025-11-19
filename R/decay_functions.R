@@ -55,7 +55,7 @@ decay_functions_period_avg <- function() {
   base_decay_funs <- decay_functions()
 
   list(
-    exponential = function(w_start, nweeks, VE0, decay_rate, ...) {
+    exponential_average = function(w_start, nweeks, VE0, decay_rate, ...) {
       time <- 1:max(nweeks)
       # Use the base exponential decay function
       ve_t <- base_decay_funs$exponential(time, VE0, decay_rate)
@@ -64,7 +64,26 @@ decay_functions_period_avg <- function() {
         mean(weekly_est[(w_start[x] + 1):(w_start[x] + 8)])
       })
     },
-    logistic = function(w_start, nweeks, VE0, decay_rate, constant, ...) {
+    exponential_midpoint = function(w_start, nweeks, VE0, decay_rate, ...) {
+      sapply(seq_along(w_start), function(x) {
+        log(
+          1 -
+            base_decay_funs$exponential(
+              w_start[x] + 4.5,
+              VE0,
+              decay_rate
+            )
+        )
+      })
+    },
+    logistic_average = function(
+      w_start,
+      nweeks,
+      VE0,
+      decay_rate,
+      constant,
+      ...
+    ) {
       time <- 1:max(nweeks)
       # Use the base logistic decay function
       ve_t <- base_decay_funs$logistic(time, VE0, decay_rate, constant)
@@ -73,13 +92,25 @@ decay_functions_period_avg <- function() {
         mean(weekly_est[(w_start[x] + 1):(w_start[x] + 8)])
       })
     },
-    logistic_simple = function(w_start, nweeks, VE0, decay_rate, ...) {
-      time <- 1:max(nweeks)
-      # Use the base simplified logistic decay function
-      ve_t <- base_decay_funs$logistic_simple(time, VE0, decay_rate)
-      weekly_est <- log(1 - ve_t)
+
+    logistic_midpoint = function(
+      w_start,
+      nweeks,
+      VE0,
+      decay_rate,
+      constant,
+      ...
+    ) {
       sapply(seq_along(w_start), function(x) {
-        mean(weekly_est[(w_start[x] + 1):(w_start[x] + 8)])
+        log(
+          1 -
+            base_decay_funs$logistic(
+              w_start[x] + 4.5,
+              VE0,
+              decay_rate,
+              constant
+            )
+        )
       })
     }
   )
