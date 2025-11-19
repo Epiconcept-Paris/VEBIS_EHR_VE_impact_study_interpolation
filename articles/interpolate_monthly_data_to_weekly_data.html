@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">VEinterpolation</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.0.0.9000</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,7 @@
 <li><a class="dropdown-item" href="../articles/interpolate_monthly_data_to_weekly_data.html">Interpolate monthly data to weekly data</a></li>
   </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
 <li class="nav-item"><form class="form-inline" role="search">
@@ -72,26 +73,17 @@
 <h2 id="introduction">Introduction<a class="anchor" aria-label="anchor" href="#introduction"></a>
 </h2>
 <p>This vignette demonstrates an approach to interpolate weekly data
-from 8-week data for vaccine effectiveness using a 3-step strategy:
-<strong>nlxb</strong> for starting values, <strong>nls</strong> for
-parameter optimization, and <strong>bootstrap</strong> for covariance
-matrix estimation.</p>
-</div>
-<div class="section level2">
-<h2 id="understanding-the-3-step-strategy">Understanding the 3-Step Strategy<a class="anchor" aria-label="anchor" href="#understanding-the-3-step-strategy"></a>
-</h2>
-<p>The 3-step fitting strategy consists of:</p>
-<ol style="list-style-type: decimal">
-<li>
-<strong>Step 1: nlxb</strong> - Uses the <code>nlsr</code> package
-to find good starting values for the parameters</li>
-<li>
-<strong>Step 2: nls</strong> - Uses the standard <code>nls</code>
-function with the starting values from step 1</li>
-<li>
-<strong>Step 3: Bootstrap</strong> - Uses parametric bootstrap to
-estimate the covariance matrix and parameter uncertainty</li>
-</ol>
+from 8-week data for vaccine effectiveness using the following
+approach:</p>
+<ul>
+<li>Generate many (e.g 1000) 8-week VE samples from random normal
+distribution with mean and standard deviation of the 8-week VE on the
+log HR scale</li>
+<li>Fit the model to the 1000 8-week VE samples and store the fitted
+values as well as the standard deviation of the residuals</li>
+<li>Add some noise to the fitted values using the standard deviation of
+the residuals to get the weekly VE samples</li>
+</ul>
 </div>
 <div class="section level2">
 <h2 id="sample-data">Sample Data<a class="anchor" aria-label="anchor" href="#sample-data"></a>
@@ -115,14 +107,13 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span>    <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_linerange.html" class="external-link">geom_errorbar</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>ymin <span class="op">=</span> <span class="fl">1</span> <span class="op">-</span> <span class="va">CIhigh</span>, ymax <span class="op">=</span> <span class="fl">1</span> <span class="op">-</span> <span class="va">CIlow</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>    <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggtheme.html" class="external-link">theme_minimal</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>    <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"Date"</span>, y <span class="op">=</span> <span class="st">"Vaccine Effectiveness"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/unnamed-chunk-2-1.png" width="768"></p>
+<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/unnamed-chunk-2-1.png" class="r-plt" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="creating-individual-decay-models">Creating Individual Decay Models<a class="anchor" aria-label="anchor" href="#creating-individual-decay-models"></a>
 </h2>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">nbootstrap</span> <span class="op">&lt;-</span> <span class="fl">100</span></span>
-<span><span class="va">seed_to_use</span> <span class="op">&lt;-</span> <span class="fl">666</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="va">seed_to_use</span> <span class="op">&lt;-</span> <span class="fl">666</span></span></code></pre></div>
 <div class="section level3">
 <h3 id="exponential-decay-model">Exponential Decay Model<a class="anchor" aria-label="anchor" href="#exponential-decay-model"></a>
 </h3>
@@ -139,23 +130,17 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span>    <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Fit the model using 3-step strategy with custom bootstrap settings</span></span>
-<span><span class="va">exponential_result</span> <span class="op">&lt;-</span> <span class="va">exponential_model</span><span class="op">$</span><span class="fu">fit_3step</span><span class="op">(</span></span>
+<span><span class="va">exponential_result</span> <span class="op">&lt;-</span> <span class="va">exponential_model</span><span class="op">$</span><span class="fu">fit_to_determine_bic</span><span class="op">(</span></span>
 <span>    estimate <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">estimate</span>,</span>
 <span>    ci_low <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIlow</span>,</span>
 <span>    ci_up <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIhigh</span>,</span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
 <span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
-<span>    nboot <span class="op">=</span> <span class="va">nbootstrap</span>,</span>
 <span>    seed <span class="op">=</span> <span class="va">seed_to_use</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">#&gt; Exponential Model Results:</span></span>
-<span><span class="co">#&gt; Coefficients: VE0 = 0.7467, decay_rate = 0.0352</span></span>
-<span><span class="co">#&gt; BIC: -7.576214</span></span>
-<span><span class="co">#&gt; Covariance Matrix:</span></span>
-<span><span class="co">#&gt;                     VE0   decay_rate</span></span>
-<span><span class="co">#&gt; VE0        0.0030176678 2.601794e-04</span></span>
-<span><span class="co">#&gt; decay_rate 0.0002601794 3.902105e-05</span></span></code></pre>
+<span><span class="co">#&gt; Coefficients: VE0 = 0.7309, decay_rate = 0.0363</span></span>
+<span><span class="co">#&gt; BIC: -13.85595</span></span></code></pre>
 </div>
 <div class="section level3">
 <h3 id="logistic-decay-model">Logistic Decay Model<a class="anchor" aria-label="anchor" href="#logistic-decay-model"></a>
@@ -173,24 +158,17 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span>    <span class="op">)</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="co"># Fit the model using 3-step strategy</span></span>
-<span><span class="va">logistic_result</span> <span class="op">&lt;-</span> <span class="va">logistic_model</span><span class="op">$</span><span class="fu">fit_3step</span><span class="op">(</span></span>
+<span><span class="va">logistic_result</span> <span class="op">&lt;-</span> <span class="va">logistic_model</span><span class="op">$</span><span class="fu">fit_to_determine_bic</span><span class="op">(</span></span>
 <span>    estimate <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">estimate</span>,</span>
 <span>    ci_low <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIlow</span>,</span>
 <span>    ci_up <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIhigh</span>,</span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
 <span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
-<span>    nboot <span class="op">=</span> <span class="va">nbootstrap</span>,</span>
 <span>    seed <span class="op">=</span> <span class="va">seed_to_use</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">#&gt; Logistic Model Results:</span></span>
-<span><span class="co">#&gt; Coefficients: VE0 = 0.6187, decay_rate = 0.1165, constant = 0.0413</span></span>
-<span><span class="co">#&gt; BIC: -12.5939</span></span>
-<span><span class="co">#&gt; Covariance Matrix:</span></span>
-<span><span class="co">#&gt;                     VE0   decay_rate     constant</span></span>
-<span><span class="co">#&gt; VE0         0.012564010 -0.002891526  0.012506712</span></span>
-<span><span class="co">#&gt; decay_rate -0.002891526  0.001035223 -0.002968276</span></span>
-<span><span class="co">#&gt; constant    0.012506712 -0.002968276  0.013898031</span></span></code></pre>
+<span><span class="co">#&gt; Coefficients: VE0 = 0.6583, decay_rate = 0.1007, constant = 0.078</span></span>
+<span><span class="co">#&gt; BIC: -12.469</span></span></code></pre>
 </div>
 </div>
 <div class="section level2">
@@ -227,7 +205,7 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span>    outcome <span class="op">=</span> <span class="st">"Some outcome"</span></span>
 <span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/pkg/gridExtra/man/arrangeGrob.html" class="external-link">grid.arrange</a></span><span class="op">(</span><span class="va">p1</span>, <span class="va">p2</span>, ncol <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></code></pre></div>
-<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/plot_individual_models-1.png" width="768"></p>
+<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/plot_individual_models-1.png" class="r-plt" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="comparing-multiple-models-at-once">Comparing multiple models at once<a class="anchor" aria-label="anchor" href="#comparing-multiple-models-at-once"></a>
@@ -240,7 +218,6 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span>    ci_up <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIhigh</span>,</span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
 <span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
-<span>    nboot <span class="op">=</span> <span class="va">nbootstrap</span>,</span>
 <span>    seed <span class="op">=</span> <span class="va">seed_to_use</span></span>
 <span><span class="op">)</span></span>
 <span></span>
@@ -248,17 +225,17 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Model Comparison Summary:\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Model Comparison Summary:</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">comparison_result</span><span class="op">$</span><span class="va">summary</span><span class="op">)</span></span>
-<span><span class="co">#&gt;         model        aic        bic</span></span>
-<span><span class="co">#&gt; 1 exponential  -9.030934  -7.576214</span></span>
-<span><span class="co">#&gt; 2    logistic -14.533530 -12.593904</span></span>
+<span><span class="co">#&gt;         model       aic       bic</span></span>
+<span><span class="co">#&gt; 1 exponential -15.31067 -13.85595</span></span>
+<span><span class="co">#&gt; 2    logistic -14.40862 -12.46900</span></span>
 <span></span>
 <span><span class="co"># Find best model based on BIC</span></span>
 <span><span class="va">best_model_bic</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/compare_decay_models.html">get_best_model</a></span><span class="op">(</span><span class="va">comparison_result</span>, criterion <span class="op">=</span> <span class="st">"bic"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"\nBest model based on BIC:"</span>, <span class="va">best_model_bic</span><span class="op">$</span><span class="va">model_name</span>, <span class="st">"\n"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Best model based on BIC: logistic</span></span>
+<span><span class="co">#&gt; Best model based on BIC: exponential</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cat.html" class="external-link">cat</a></span><span class="op">(</span><span class="st">"Best BIC:"</span>, <span class="va">best_model_bic</span><span class="op">$</span><span class="va">criterion</span>, <span class="st">"\n"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Best BIC: -12.5939</span></span></code></pre></div>
+<span><span class="co">#&gt; Best BIC: -13.85595</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="model-comparison-plot">Model Comparison Plot<a class="anchor" aria-label="anchor" href="#model-comparison-plot"></a>
@@ -280,7 +257,7 @@ estimates of vaccine effectiveness (VE) for 12 months.</p>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">comparison_plot</span><span class="op">)</span></span></code></pre></div>
-<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/model_comparison_plot-1.png" width="768"></p>
+<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/model_comparison_plot-1.png" class="r-plt" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="generate-many-weekly-ve-samples-with-uncertainty-from-covariance-matrix">Generate many weekly VE samples with uncertainty from covariance
@@ -291,53 +268,79 @@ to generate VE samples based on the bootstrap covariance matrix,
 providing uncertainty quantification:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Generate VE samples based on bootstrap fit</span></span>
-<span><span class="va">ve_samples</span> <span class="op">&lt;-</span> <span class="va">best_model_bic</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">generate_VE_based_on_boot_fit</span><span class="op">(</span></span>
+<span><span class="va">best_model</span> <span class="op">&lt;-</span> <span class="va">best_model_bic</span></span>
+<span><span class="va">ve_samples</span> <span class="op">&lt;-</span> <span class="va">best_model</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">generate_VE_based_on_resampling</span><span class="op">(</span></span>
+<span>    estimate <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">estimate</span>,</span>
+<span>    ci_low <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIlow</span>,</span>
+<span>    ci_up <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIhigh</span>,</span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
 <span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
 <span>    n_weekly_ve_to_generate <span class="op">=</span> <span class="fl">1000</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="va">ve_samples</span>, <span class="fl">10</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;    period_start period_end        VE ve_sample</span></span>
-<span><span class="co">#&gt; 1    2023-10-01 2023-10-07 0.5713216         1</span></span>
-<span><span class="co">#&gt; 2    2023-10-08 2023-10-14 0.5634166         1</span></span>
-<span><span class="co">#&gt; 3    2023-10-15 2023-10-21 0.5545968         1</span></span>
-<span><span class="co">#&gt; 4    2023-10-22 2023-10-28 0.5447945         1</span></span>
-<span><span class="co">#&gt; 5    2023-10-29 2023-11-04 0.5339474         1</span></span>
-<span><span class="co">#&gt; 6    2023-11-05 2023-11-11 0.5220015         1</span></span>
-<span><span class="co">#&gt; 7    2023-11-12 2023-11-18 0.5089149         1</span></span>
-<span><span class="co">#&gt; 8    2023-11-19 2023-11-25 0.4946610         1</span></span>
-<span><span class="co">#&gt; 9    2023-11-26 2023-12-02 0.4792335         1</span></span>
-<span><span class="co">#&gt; 10   2023-12-03 2023-12-09 0.4626488         1</span></span></code></pre></div>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">best_model</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="va">nlrob_samples</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="co">#&gt;  [1]  0.77130208  0.69606653  0.70383210  0.63670683  0.54326916  0.55777561</span></span>
+<span><span class="co">#&gt;  [7]  0.53599977  0.56982274  0.52326807  0.43053240  0.47479437  0.56936740</span></span>
+<span><span class="co">#&gt; [13]  0.48932784  0.36392496  0.34836300  0.33403038  0.40833986  0.47538537</span></span>
+<span><span class="co">#&gt; [19]  0.43720746  0.43838677  0.43170018  0.28671542  0.33456315  0.12828975</span></span>
+<span><span class="co">#&gt; [25]  0.30538163  0.30120285  0.26630647  0.32640983  0.32174312  0.32557620</span></span>
+<span><span class="co">#&gt; [31]  0.23751670  0.37776333  0.19777997  0.20998851  0.24222891  0.15442601</span></span>
+<span><span class="co">#&gt; [37]  0.08419762  0.15652543  0.26590230  0.21824732  0.18995632 -0.04686583</span></span>
+<span><span class="co">#&gt; [43]  0.14320589  0.10098649  0.15176734  0.13690023  0.23566475  0.17283280</span></span>
+<span><span class="co">#&gt; [49]  0.12646978 -0.01102106  0.16354866  0.13250184  0.19858986  0.08922504</span></span>
+<span><span class="co">#&gt; [55]  0.12740127  0.13706247</span></span></code></pre></div>
+<div class="section level3">
+<h3 id="get-summary-of-ve-samples">Get summary of VE samples<a class="anchor" aria-label="anchor" href="#get-summary-of-ve-samples"></a>
+</h3>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ve_summary</span> <span class="op">&lt;-</span> <span class="va">best_model</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">generate_VE_summary</span><span class="op">(</span></span>
+<span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
+<span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">ve_summary</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># A tibble: 56 × 6</span></span></span>
+<span><span class="co">#&gt;    period_start VE_median VE_mean  VE_sd VE_quantile_025 VE_quantile_975</span></span>
+<span><span class="co">#&gt;    <span style="color: #949494; font-style: italic;">&lt;date&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>   <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>  <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span>           <span style="color: #949494; font-style: italic;">&lt;dbl&gt;</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 1</span> 2023-10-01       0.711   0.706 0.057<span style="text-decoration: underline;">0</span>           0.585           0.806</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 2</span> 2023-10-08       0.687   0.682 0.056<span style="text-decoration: underline;">5</span>           0.552           0.786</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 3</span> 2023-10-15       0.662   0.656 0.061<span style="text-decoration: underline;">0</span>           0.519           0.754</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 4</span> 2023-10-22       0.636   0.632 0.064<span style="text-decoration: underline;">9</span>           0.486           0.747</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 5</span> 2023-10-29       0.616   0.609 0.065<span style="text-decoration: underline;">1</span>           0.456           0.722</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 6</span> 2023-11-05       0.593   0.588 0.069<span style="text-decoration: underline;">0</span>           0.436           0.711</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 7</span> 2023-11-12       0.571   0.568 0.068<span style="text-decoration: underline;">1</span>           0.416           0.687</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 8</span> 2023-11-19       0.552   0.544 0.075<span style="text-decoration: underline;">3</span>           0.379           0.673</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;"> 9</span> 2023-11-26       0.532   0.528 0.070<span style="text-decoration: underline;">7</span>           0.361           0.652</span></span>
+<span><span class="co">#&gt; <span style="color: #BCBCBC;">10</span> 2023-12-03       0.509   0.507 0.078<span style="text-decoration: underline;">3</span>           0.334           0.651</span></span>
+<span><span class="co">#&gt; <span style="color: #949494;"># ℹ 46 more rows</span></span></span></code></pre></div>
+</div>
 <div class="section level3">
 <h3 id="ve-with-uncertainty-bands">VE with Uncertainty Bands<a class="anchor" aria-label="anchor" href="#ve-with-uncertainty-bands"></a>
 </h3>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># Plot VE with uncertainty bands</span></span>
-<span><span class="va">uncertainty_plot</span> <span class="op">&lt;-</span> <span class="va">best_model_bic</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">plot_VE_with_uncertainty</span><span class="op">(</span></span>
+<span><span class="va">uncertainty_plot</span> <span class="op">&lt;-</span> <span class="va">best_model</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">plot_VE_with_uncertainty</span><span class="op">(</span></span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
-<span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
-<span>    title <span class="op">=</span> <span class="st">"Logistic Model VE with uncertainty"</span></span>
+<span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">uncertainty_plot</span><span class="op">)</span></span></code></pre></div>
-<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/ve_uncertainty_plot-1.png" width="960"></p>
+<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/ve_uncertainty_plot-1.png" class="r-plt" width="960"></p>
 </div>
 <div class="section level3">
-<h3 id="show-individual-ve-samples">Show individual VE samples<a class="anchor" aria-label="anchor" href="#show-individual-ve-samples"></a>
+<h3 id="ve-with-uncertainty-bands-plus-raw-data">VE with Uncertainty Bands plus raw data<a class="anchor" aria-label="anchor" href="#ve-with-uncertainty-bands-plus-raw-data"></a>
 </h3>
-<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># Plot individual bootstrap samples</span></span>
-<span><span class="va">some_ve_plot</span> <span class="op">&lt;-</span> <span class="va">best_model_bic</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">plot_ve_samples</span><span class="op">(</span></span>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ve_uncertainty_plot_plus_raw_data</span> <span class="op">&lt;-</span> <span class="va">best_model</span><span class="op">$</span><span class="va">model</span><span class="op">$</span><span class="fu">plot_VE_with_uncertainty_plus_raw_data</span><span class="op">(</span></span>
+<span>    estimate <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">estimate</span>,</span>
+<span>    ci_low <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIlow</span>,</span>
+<span>    ci_up <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">CIhigh</span>,</span>
 <span>    periods_starts <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_min</span>,</span>
-<span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span>,</span>
-<span>    n_samples <span class="op">=</span> <span class="fl">5</span>,</span>
-<span>    title <span class="op">=</span> <span class="st">"Individual VE Samples - Logistic Model"</span>,</span>
-<span>    alpha <span class="op">=</span> <span class="fl">1</span></span>
+<span>    periods_ends <span class="op">=</span> <span class="va">sample_8_weeks_data</span><span class="op">$</span><span class="va">date_max</span></span>
 <span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">some_ve_plot</span><span class="op">)</span></span></code></pre></div>
-<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/some_ve_plot-1.png" width="960"></p>
+<span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">ve_uncertainty_plot_plus_raw_data</span><span class="op">)</span></span></code></pre></div>
+<p><img src="interpolate_monthly_data_to_weekly_data_files/figure-html/ve_uncertainty_plot_plus_raw_data-1.png" class="r-plt" width="960"></p>
 </div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
@@ -351,7 +354,7 @@ providing uncertainty quantification:</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.3.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.0.</p>
 </div>
 
     </footer>
