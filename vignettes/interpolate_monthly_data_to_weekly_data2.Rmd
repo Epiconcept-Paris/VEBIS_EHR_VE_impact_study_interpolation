@@ -1,0 +1,313 @@
+---
+title: "Interpolate monthly data to weekly data"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{interpolate_monthly_data_to_weekly_data}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+    collapse = TRUE,
+    comment = "#>"
+)
+```
+
+```{r setup}
+# library(impactstudy)
+library(ggplot2)
+library(dplyr)
+library(gridExtra)
+library(nlsr)
+library(patchwork)
+library(robustbase)
+pkgload::load_all()
+```
+
+## Introduction
+
+This vignette demonstrates an alternative approach to fitting decay models for vaccine effectiveness interpolation using a 3-step strategy: **nlxb** for starting values, **nls** for parameter optimization, and **bootstrap** for covariance matrix estimation. This approach provides more robust parameter estimation and uncertainty quantification compared to the standard optimization approach.
+
+## Understanding the 3-Step Strategy
+
+The 3-step fitting strategy consists of:
+
+1. **Step 1: nlxb** - Uses the `nlsr` package to find good starting values for the parameters
+2. **Step 2: nls** - Uses the standard `nls` function with the starting values from step 1
+3. **Step 3: Bootstrap** - Computes bootstrap samples to estimate the covariance matrix and parameter uncertainty
+
+This approach is particularly useful when dealing with complex decay functions or when the standard optimization approach fails to converge.
+
+## Sample Data
+
+We'll use the same toy dataset provided in the package, containing 8-weeks estimates of vaccine effectiveness (VE) for 12 months.
+
+```{r sample_data}
+rds_name <- "death80_20242025"
+rds <- readRDS(paste0(rds_name, ".rds"))
+```
+
+```{r}
+plot(1 - exp(rds$log_estimate), type = "l")
+```
+
+# logistic : generate 1000 8-weeks VE
+
+```{r}
+n_ve_to_generate <- 1000
+
+generate_1_week_sample <- function(log_estimate, sd) {
+    rnorm(n = length(log_estimate), mean = log_estimate, sd = sd)
+}
+generate_1000_week_samples <- lapply(1:n_ve_to_generate, function(i) generate_1_week_sample(rds$log_estimate, rds$se))
+```
+
+```{r}
+log_estimate <- rds$log_estimate
+se <- rds$se
+timing <- rds$timing
+n_weeks <- rds$n_weeks
+
+raw_ve <- data.frame(
+    period_start = rds$timing$date_min + 28,
+    VE = 1 - exp(rds$log_estimate),
+    VEhigh = 1 - exp(rds$log_estimate - 1.96 * rds$se),
+    VElow = 1 - exp(rds$log_estimate + 1.96 * rds$se)
+)
+
+param_config <- list(
+    start = c(VE0 = 0.7, decay_rate = 0.1, constant = 0.5),
+    lower = c(0.01, 0.001, 0.01),
+    upper = c(0.99, 1.0, 2.0),
+    names = c("VE0", "decay_rate", "constant")
+)
+logistic_model <- DecayModel$new(
+    name = "logistic",
+    decay_function = logistic_decay(),
+    param_config = param_config
+)
+decay_functions_period <- decay_functions_period_avg()
+```
+
+# prepare fit 1 sample functions
+
+## classic nls
+
+```{r}
+fit_1_sample_nls_classic <- function(log_estimate, se, timing, n_weeks, logistic_model, decay_func_period, correct_se_8weeks = FALSE) {
+    # decay_func_period <- decay_functions_period$logistic
+    formula_str <- "log_estimate ~ decay_func_period(w_start, nweeks, VE0, decay_rate, constant)"
+
+    # Step 1: nlxb for starting values
+    nlxb_fit <- nlxb(
+        as.formula(formula_str),
+        data = data.frame(
+            log_estimate = log_estimate,
+            w_start = timing$diff_start,
+            nweeks = n_weeks
+        ),
+        start = logistic_model$param_config$start,
+        # weights = 1 / se^2,
+        lower = logistic_model$param_config$lower,
+        upper = logistic_model$param_config$upper,
+        control = list(japprox = "jacentral")
+    )
+    start_v <- coef(nlxb_fit)
+    # summary(nlxb_fit)$sigma
+
+    nls_fit <- suppressWarnings(nls(
+        as.formula(formula_str),
+        start = start_v,
+        # weights = 1 / se^2,
+        lower = logistic_model$param_config$lower,
+        upper = logistic_model$param_config$upper,
+        data = data.frame(
+            log_estimate = log_estimate,
+            w_start = timing$diff_start,
+            nweeks = n_weeks
+        ),
+        algorithm = "port",
+        control = list(maxiter = 500, warnOnly = TRUE)
+    ))
+    # summary(nls_fit)$sigma
+
+    weekly_VE <- do.call(
+        logistic_model$decay_function,
+        c(list(time_steps = 1:n_weeks), as.list(coef(nls_fit)))
+    )
+
+    sigma <- summary(nls_fit)$sigma
+    if (correct_se_8weeks) {
+        sigma <- sigma * sqrt(8)
+    }
+
+    weekly_VE_as_logHR <- log(1 - weekly_VE)
+    weekly_VE_as_logHR_with_noise <- rnorm(length(weekly_VE_as_logHR), mean = weekly_VE_as_logHR, sd = sigma)
+    weekly_VE_with_noise <- 1 - exp(weekly_VE_as_logHR_with_noise)
+
+    weekly_VE_with_noise
+}
+fit_1_sample_nls_classic_robust <- purrr::possibly(fit_1_sample_nls_classic)
+```
+
+## nlrob
+
+```{r}
+fit_1_sample_nlrob <- function(log_estimate, se, timing, n_weeks, logistic_model, decay_func_period, correct_se_8weeks = FALSE) {
+    # decay_func_period <- decay_functions_period$logistic
+    formula_str <- "log_estimate ~ decay_func_period(w_start, nweeks, VE0, decay_rate, constant)"
+    decay_func_period <<- decay_func_period
+
+    nlrob_fit <- nlrob(
+        as.formula(formula_str),
+        data = data.frame(
+            log_estimate = log_estimate,
+            w_start = timing$diff_start,
+            nweeks = n_weeks
+        ),
+        start = logistic_model$param_config$start,
+        lower = logistic_model$param_config$lower,
+        upper = logistic_model$param_config$upper,
+        control = list(maxiter = 50, warnOnly = TRUE),
+        # weights = 1 / se^2,
+        maxit = 50,
+        method = "M",
+        algorithm = "port"
+    )
+
+    weekly_VE <- do.call(
+        logistic_model$decay_function,
+        c(list(time_steps = 1:n_weeks), as.list(coef(nlrob_fit)))
+    )
+
+    sigma <- summary(nlrob_fit)$Scale
+    if (correct_se_8weeks) {
+        sigma <- sigma * sqrt(8)
+    }
+
+    weekly_VE_as_logHR <- log(1 - weekly_VE)
+    weekly_VE_as_logHR_with_noise <- rnorm(length(weekly_VE_as_logHR), mean = weekly_VE_as_logHR, sd = sigma)
+    weekly_VE_with_noise <- 1 - exp(weekly_VE_as_logHR_with_noise)
+
+    weekly_VE_with_noise
+}
+
+fit_1_sample_nlrob_robust <- purrr::possibly(fit_1_sample_nlrob)
+```
+
+# Models
+
+## nls classic
+
+```{r}
+nls_classic_average <- purrr::map(1:n_ve_to_generate, function(i) {
+    fit_1_sample_nls_classic_robust(log_estimate = generate_1000_week_samples[[i]], se = rds$se, timing = rds$timing, n_weeks = rds$n_weeks, logistic_model = logistic_model, decay_func_period = decay_functions_period$logistic_average, correct_se_8weeks = TRUE)
+})
+
+nls_classic_midpoint <- purrr::map(1:n_ve_to_generate, function(i) {
+    fit_1_sample_nls_classic_robust(log_estimate = generate_1000_week_samples[[i]], se = rds$se, timing = rds$timing, n_weeks = rds$n_weeks, logistic_model = logistic_model, decay_func_period = decay_functions_period$logistic_midpoint, correct_se_8weeks = FALSE)
+})
+```
+
+
+## nlrob
+
+```{r}
+nlrob_average <- purrr::map(1:n_ve_to_generate, function(i) {
+    log_estimate <- generate_1000_week_samples[[i]]
+    fit_1_sample_nlrob_robust(log_estimate = log_estimate, se = rds$se, timing = rds$timing, n_weeks = rds$n_weeks, logistic_model = logistic_model, decay_func_period = decay_functions_period$logistic_average, correct_se_8weeks = TRUE)
+})
+
+nlrob_midpoint <- purrr::map(1:n_ve_to_generate, function(i) {
+    log_estimate <- generate_1000_week_samples[[i]]
+    fit_1_sample_nlrob_robust(log_estimate = log_estimate, se = rds$se, timing = rds$timing, n_weeks = rds$n_weeks, logistic_model = logistic_model, decay_func_period = decay_functions_period$logistic_midpoint, correct_se_8weeks = FALSE)
+})
+```
+
+```{r}
+saveRDS(
+    list(
+        nls_classic_average = nls_classic_average,
+        nls_classic_midpoint = nls_classic_midpoint,
+        nlrob_average = nlrob_average,
+        nlrob_midpoint = nlrob_midpoint
+    ),
+    file = paste0(rds_name, "_model_results.rds")
+)
+```
+
+
+## clean
+
+```{r}
+clean_model_results_and_make_resum <- function(model_results) {
+    model_results <- purrr::discard(model_results, is.null)
+    print(length(model_results))
+    model_results_df <- map(seq_len(length(model_results)), function(x) {
+        data.frame(
+            period_start = min(rds$timing$date_min) + 0:(rds$n_weeks - 1) * 7,
+            VE = model_results[[x]],
+            sample = x
+        )
+    }) %>% purrr::list_rbind()
+    model_results_resum <- model_results_df %>%
+        group_by(period_start) %>%
+        summarise(
+            VE_mean = mean(VE),
+            VE_sd = sd(VE),
+            VE_median = median(VE),
+            VE_quantile_025 = quantile(VE, 0.025),
+            VE_quantile_975 = quantile(VE, 0.975),
+        )
+    return(model_results_resum)
+}
+```
+
+```{r}
+nls_classic_average_resum <- clean_model_results_and_make_resum(nls_classic_average)
+nls_classic_midpoint_resum <- clean_model_results_and_make_resum(nls_classic_midpoint)
+nlrob_average_resum <- clean_model_results_and_make_resum(nlrob_average)
+nlrob_midpoint_resum <- clean_model_results_and_make_resum(nlrob_midpoint)
+```
+
+## plot
+
+```{r}
+make_resum_plot <- function(generated_resum, raw_ve, rds_name, method, limits = c(-4, 1)) {
+    ggplot() +
+        geom_ribbon(data = generated_resum, aes(x = period_start, ymin = VE_quantile_025, ymax = VE_quantile_975), alpha = 0.5) +
+        geom_line(data = generated_resum, aes(x = period_start, y = VE_median)) +
+        geom_point(data = raw_ve, aes(x = period_start, y = VE)) +
+        geom_errorbar(data = raw_ve, aes(x = period_start, ymin = VElow, ymax = VEhigh), width = 0.1) +
+        scale_y_continuous(limits = limits, breaks = seq(limits[1], limits[2], 0.2)) +
+        labs(title = method, subtitle = rds_name)
+}
+```
+
+```{r}
+if (rds_name == "hosp80_20232024") {
+    limits <- c(-2.5, 1)
+} else if (rds_name == "hosp65_20232024") {
+    limits <- c(-2, 1)
+} else if (rds_name == "death80_20232024") {
+    limits <- c(-7, 1)
+} else if (rds_name == "hosp65_20242025") {
+    limits <- c(-3, 1)
+} else if (rds_name == "hosp80_20242025") {
+    limits <- c(-2.2, 1)
+} else if (rds_name == "death80_20242025") {
+    limits <- c(-7.5, 1)
+}
+plt1 <- make_resum_plot(nls_classic_average_resum, raw_ve, rds_name, "nls classic average", limits = limits)
+plt2 <- make_resum_plot(nls_classic_midpoint_resum, raw_ve, rds_name, "nls classic midpoint", limits = limits)
+plt3 <- make_resum_plot(nlrob_average_resum, raw_ve, rds_name, "nlrob average", limits = limits)
+plt4 <- make_resum_plot(nlrob_midpoint_resum, raw_ve, rds_name, "nlrob midpoint", limits = limits)
+```
+
+```{r}
+plt_combined <- (plt1 + plt2) / (plt3 + plt4)
+plt_combined
+ggsave(paste0(rds_name, "_nls_classic_and_nlrob_comparison.png"), plt_combined, width = 10, height = 10)
+```
+

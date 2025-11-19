@@ -81,6 +81,43 @@ decay_functions_period_avg <- function() {
       sapply(seq_along(w_start), function(x) {
         mean(weekly_est[(w_start[x] + 1):(w_start[x] + 8)])
       })
+    },
+    logistic_average = function(
+      w_start,
+      nweeks,
+      VE0,
+      decay_rate,
+      constant,
+      ...
+    ) {
+      time <- 1:max(nweeks)
+      # Use the base logistic decay function
+      ve_t <- base_decay_funs$logistic(time, VE0, decay_rate, constant)
+      weekly_est <- log(1 - ve_t)
+      sapply(seq_along(w_start), function(x) {
+        mean(weekly_est[(w_start[x] + 1):(w_start[x] + 8)])
+      })
+    },
+
+    logistic_midpoint = function(
+      w_start,
+      nweeks,
+      VE0,
+      decay_rate,
+      constant,
+      ...
+    ) {
+      sapply(seq_along(w_start), function(x) {
+        log(
+          1 -
+            base_decay_funs$logistic(
+              w_start[x] + 4.5,
+              VE0,
+              decay_rate,
+              constant
+            )
+        )
+      })
     }
   )
 }
