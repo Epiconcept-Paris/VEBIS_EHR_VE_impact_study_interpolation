@@ -23,8 +23,8 @@ compare_decay_models(
     0.01), upper = c(0.99, 1, 2), names = c("VE0", "decay_rate", "constant")),
     logistic_simple = list(start = c(VE0 = 0.7, decay_rate = 0.1), lower = c(0.01,
     0.001), upper = c(0.99, 1), names = c("VE0", "decay_rate"))),
-  nboot = 100,
-  seed = 123
+  seed = 123,
+  type_of_fit = "midpoint"
 )
 
 plot_model_comparison(
@@ -65,9 +65,9 @@ get_best_model_instance(comparison_result, criterion = "aic")
 
 \item{param_configs}{List of parameter configurations to use (default is list(exponential = list(start = c(VE0 = 0.7, decay_rate = 0.1), lower = c(0.01, 0.001), upper = c(0.99, 1.0), names = c("VE0", "decay_rate")), logistic = list(start = c(VE0 = 0.7, decay_rate = 0.1, constant = 0.5), lower = c(0.01, 0.001, 0.01), upper = c(0.99, 1.0, 2.0), names = c("VE0", "decay_rate", "constant")), logistic_simple = list(start = c(VE0 = 0.7, decay_rate = 0.1), lower = c(0.01, 0.001), upper = c(0.99, 1.0), names = c("VE0", "decay_rate"))))}
 
-\item{nboot}{Number of bootstrap samples (default is 100)}
-
 \item{seed}{Seed to use for reproducibility (default is 123)}
+
+\item{type_of_fit}{Type of fit (default is "midpoint")}
 
 \item{comparison_result}{List containing models, results, comparison, and summary}
 
