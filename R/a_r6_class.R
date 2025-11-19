@@ -1115,8 +1115,8 @@ DecayModel <- R6::R6Class(
 #' @param periods_ends Vector of periods ends
 #' @param decay_funs List of decay functions to use (default is list(exponential = exponential_decay(), logistic = logistic_decay(), logistic_simple = logistic_simple_decay()))
 #' @param param_configs List of parameter configurations to use (default is list(exponential = list(start = c(VE0 = 0.7, decay_rate = 0.1), lower = c(0.01, 0.001), upper = c(0.99, 1.0), names = c("VE0", "decay_rate")), logistic = list(start = c(VE0 = 0.7, decay_rate = 0.1, constant = 0.5), lower = c(0.01, 0.001, 0.01), upper = c(0.99, 1.0, 2.0), names = c("VE0", "decay_rate", "constant")), logistic_simple = list(start = c(VE0 = 0.7, decay_rate = 0.1), lower = c(0.01, 0.001), upper = c(0.99, 1.0), names = c("VE0", "decay_rate"))))
-#' @param nboot Number of bootstrap samples (default is 100)
 #' @param seed Seed to use for reproducibility (default is 123)
+#' @param type_of_fit Type of fit (default is "midpoint")
 #' @importFrom purrr map list_rbind
 #' @return List containing models, results, comparison, and summary
 #' @export

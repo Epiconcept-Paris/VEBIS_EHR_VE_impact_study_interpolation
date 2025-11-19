@@ -67,6 +67,8 @@ get_best_model_instance(comparison_result, criterion = "aic")
 
 \item{seed}{Seed to use for reproducibility (default is 123)}
 
+\item{type_of_fit}{Type of fit (default is "midpoint")}
+
 \item{comparison_result}{List containing models, results, comparison, and summary}
 
 \item{colors}{Vector of colors to use for the models (default is c("red", "blue", "green", "purple", "orange"))}
@@ -80,8 +82,6 @@ get_best_model_instance(comparison_result, criterion = "aic")
 \item{season}{Season}
 
 \item{outcome}{Outcome}
-
-\item{nboot}{Number of bootstrap samples (default is 100)}
 }
 \value{
 List containing models, results, comparison, and summary
