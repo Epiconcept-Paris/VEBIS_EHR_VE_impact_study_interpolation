@@ -219,7 +219,7 @@ DecayModel <- R6::R6Class(
 
       decay_func_period <<- decay_func_period
 
-      nlrob_fit <- nlrob(
+      nlrob_fit <- suppressWarnings(nlrob(
         as.formula(formula_str),
         data = data.frame(
           log_estimate = log_estimate,
@@ -234,7 +234,7 @@ DecayModel <- R6::R6Class(
         maxit = maxiteritations,
         method = "M",
         algorithm = "port"
-      )
+      ))
 
       has_converged <- nlrob_fit$status == "converged"
 
