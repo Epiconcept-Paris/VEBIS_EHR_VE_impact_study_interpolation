@@ -101,6 +101,9 @@ DecayModel <- R6::R6Class(
     #' @field nlrob_samples List of nlrob samples
     nlrob_samples = NULL,
 
+    #' @field nlrob_samples_clean List of noise-free nlrob VE curves
+    nlrob_samples_clean = NULL,
+
     #' @field ve_summary Summary of VE samples
     ve_summary = NULL,
 
@@ -362,12 +365,12 @@ DecayModel <- R6::R6Class(
         )
         weekly_VE_with_noise <- 1 - exp(weekly_VE_as_logHR_with_noise)
 
-        weekly_VE_with_noise
+        list(clean = weekly_VE, noisy = weekly_VE_with_noise)
       }
 
       fit_1_sample_nlrob_robust <- purrr::possibly(fit_1_sample_nlrob)
 
-      nlrob_samples <- purrr::map(1:n_weekly_ve_to_generate, function(i) {
+      fits <- purrr::map(1:n_weekly_ve_to_generate, function(i) {
         log_estimate <- eight_weeks_samples[[i]]
         set.seed(seed + i)
         fit_1_sample_nlrob_robust(
@@ -381,7 +384,8 @@ DecayModel <- R6::R6Class(
         )
       })
 
-      self$nlrob_samples <- nlrob_samples
+      self$nlrob_samples <- purrr::map(fits, "noisy")
+      self$nlrob_samples_clean <- purrr::map(fits, "clean")
 
       return(self$nlrob_samples)
     },
@@ -437,6 +441,33 @@ DecayModel <- R6::R6Class(
           .groups = "drop"
         )
 
+      # Same summary on the noise-free curves (no measurement error)
+      if (!is.null(self$nlrob_samples_clean)) {
+        clean_samples <- lapply(
+          seq_along(self$nlrob_samples_clean),
+          function(x) {
+            data.frame(
+              period_start = min(periods_starts) + 0:(n_weeks - 1) * 7,
+              VE = self$nlrob_samples_clean[[x]],
+              sample = x
+            )
+          }
+        )
+        clean_summary <- do.call(rbind, clean_samples) %>%
+          dplyr::group_by(period_start) %>%
+          dplyr::summarise(
+            VE_clean_median = median(VE),
+            VE_clean_quantile_025 = quantile(VE, 0.025),
+            VE_clean_quantile_975 = quantile(VE, 0.975),
+            .groups = "drop"
+          )
+        ve_summary <- dplyr::left_join(
+          ve_summary,
+          clean_summary,
+          by = "period_start"
+        )
+      }
+
       self$ve_summary <- ve_summary
 
       return(self$ve_summary)
@@ -450,6 +481,10 @@ DecayModel <- R6::R6Class(
     #' @param alpha Transparency for the ribbon (default is 0.3)
     #' @param show_points Whether to show points on the line (default is TRUE)
     #' @param probs Vector of quantiles for confidence intervals (default is c(0.025, 0.975))
+    #' @param show_clean If TRUE (default), the line is the noise-free interpolated
+    #'   VE, the inner ribbon its bootstrap interval and the outer ribbon the
+    #'   interval including measurement error. If FALSE, the line is the median of
+    #'   the noisy samples with a single ribbon.
     #' @importFrom ggplot2 ggplot aes geom_ribbon geom_line geom_point theme_minimal labs
     #' @return ggplot object
     plot_VE_with_uncertainty = function(
@@ -459,7 +494,8 @@ DecayModel <- R6::R6Class(
       color = "blue",
       alpha = 0.3,
       show_points = TRUE,
-      probs = c(0.025, 0.975)
+      probs = c(0.025, 0.975),
+      show_clean = TRUE
     ) {
       # Validate parameter lengths
       validate_parameter_lengths(
@@ -480,13 +516,14 @@ DecayModel <- R6::R6Class(
       )
 
       # Create plot
-      p <- ggplot(ve_summary, aes(x = period_start, y = VE_median)) +
-        geom_ribbon(
-          aes(ymin = VE_quantile_025, ymax = VE_quantile_975),
-          alpha = alpha,
-          fill = color
-        ) +
-        geom_line(color = color, linewidth = 1) +
+      p <- add_ve_layers(
+        ggplot(),
+        ve_summary,
+        color,
+        alpha,
+        show_clean,
+        show_points
+      ) +
         theme_minimal() +
         labs(
           x = "Period Start",
@@ -496,16 +533,8 @@ DecayModel <- R6::R6Class(
             paste(self$name, "model"),
             title
           ),
-          subtitle = paste(
-            "Ribbon shows",
-            paste0(round((probs[length(probs)] - probs[1]) * 100), "%"),
-            "prediction intervals"
-          )
+          subtitle = ve_plot_subtitle(probs, show_clean)
         )
-
-      if (show_points) {
-        p <- p + geom_point(color = color, size = 2)
-      }
 
       return(p)
     },
@@ -521,6 +550,7 @@ DecayModel <- R6::R6Class(
     #' @param alpha Transparency for the ribbon (default is 0.3)
     #' @param show_points Whether to show points on the line (default is TRUE)
     #' @param probs Vector of quantiles for confidence intervals (default is c(0.025, 0.975))
+    #' @param show_clean See `plot_VE_with_uncertainty()` (default is TRUE)
     #' @importFrom ggplot2 ggplot aes geom_ribbon geom_line geom_point theme_minimal labs
     #' @return ggplot object
     plot_VE_with_uncertainty_plus_raw_data = function(
@@ -533,7 +563,8 @@ DecayModel <- R6::R6Class(
       color = "blue",
       alpha = 0.3,
       show_points = TRUE,
-      probs = c(0.025, 0.975)
+      probs = c(0.025, 0.975),
+      show_clean = TRUE
     ) {
       # Validate parameter lengths
       validate_parameter_lengths(
@@ -561,24 +592,14 @@ DecayModel <- R6::R6Class(
       )
 
       # Create plot
-      p <- ggplot() +
-        geom_ribbon(
-          data = ve_summary,
-          aes(
-            x = period_start,
-            y = VE_median,
-            ymin = VE_quantile_025,
-            ymax = VE_quantile_975
-          ),
-          alpha = alpha,
-          fill = color
-        ) +
-        geom_line(
-          data = ve_summary,
-          aes(x = period_start, y = VE_median),
-          color = color,
-          linewidth = 1
-        ) +
+      p <- add_ve_layers(
+        ggplot(),
+        ve_summary,
+        color,
+        alpha,
+        show_clean,
+        show_points
+      ) +
         geom_point(data = raw_ve, aes(x = period_start, y = VE)) +
         geom_errorbar(
           data = raw_ve,
@@ -594,17 +615,11 @@ DecayModel <- R6::R6Class(
             paste(self$name, "model"),
             title
           ),
-          subtitle = paste(
-            "Ribbon shows",
-            paste0(round((probs[length(probs)] - probs[1]) * 100), "%"),
-            "prediction intervals\n",
-            "Points and error bars show raw data"
+          subtitle = paste0(
+            ve_plot_subtitle(probs, show_clean),
+            "\nPoints and error bars show raw data"
           )
         )
-
-      if (show_points) {
-        p <- p + geom_point(color = color, size = 2)
-      }
 
       return(p)
     },
