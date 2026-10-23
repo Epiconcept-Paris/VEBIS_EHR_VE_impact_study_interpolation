@@ -19,6 +19,8 @@ A class to represent a decay model
 
 \item{\code{nlrob_samples}}{List of nlrob samples}
 
+\item{\code{nlrob_samples_clean}}{List of noise-free nlrob VE curves}
+
 \item{\code{ve_summary}}{Summary of VE samples}
 }
 \if{html}{\out{</div>}}
@@ -230,7 +232,8 @@ Plot VE with uncertainty bands from bootstrap
   color = "blue",
   alpha = 0.3,
   show_points = TRUE,
-  probs = c(0.025, 0.975)
+  probs = c(0.025, 0.975),
+  show_clean = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -250,6 +253,11 @@ Plot VE with uncertainty bands from bootstrap
 \item{\code{show_points}}{Whether to show points on the line (default is TRUE)}
 
 \item{\code{probs}}{Vector of quantiles for confidence intervals (default is c(0.025, 0.975))}
+
+\item{\code{show_clean}}{If TRUE (default), the line is the noise-free interpolated
+VE, the inner ribbon its bootstrap interval and the outer ribbon the
+interval including measurement error. If FALSE, the line is the median of
+the noisy samples with a single ribbon.}
 }
 \if{html}{\out{</div>}}
 }
@@ -273,7 +281,8 @@ Plot VE with uncertainty bands from bootstrap
   color = "blue",
   alpha = 0.3,
   show_points = TRUE,
-  probs = c(0.025, 0.975)
+  probs = c(0.025, 0.975),
+  show_clean = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -299,6 +308,8 @@ Plot VE with uncertainty bands from bootstrap
 \item{\code{show_points}}{Whether to show points on the line (default is TRUE)}
 
 \item{\code{probs}}{Vector of quantiles for confidence intervals (default is c(0.025, 0.975))}
+
+\item{\code{show_clean}}{See \code{plot_VE_with_uncertainty()} (default is TRUE)}
 }
 \if{html}{\out{</div>}}
 }
