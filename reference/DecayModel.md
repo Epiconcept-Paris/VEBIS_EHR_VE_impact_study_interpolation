@@ -24,6 +24,10 @@ A class to represent a decay model
 
   List of nlrob samples
 
+- `nlrob_samples_clean`:
+
+  List of noise-free nlrob VE curves
+
 - `ve_summary`:
 
   Summary of VE samples
@@ -293,7 +297,8 @@ Plot VE with uncertainty bands from bootstrap
       color = "blue",
       alpha = 0.3,
       show_points = TRUE,
-      probs = c(0.025, 0.975)
+      probs = c(0.025, 0.975),
+      show_clean = TRUE
     )
 
 #### Arguments
@@ -327,6 +332,13 @@ Plot VE with uncertainty bands from bootstrap
   Vector of quantiles for confidence intervals (default is c(0.025,
   0.975))
 
+- `show_clean`:
+
+  If TRUE (default), the line is the noise-free interpolated VE, the
+  inner ribbon its bootstrap interval and the outer ribbon the interval
+  including measurement error. If FALSE, the line is the median of the
+  noisy samples with a single ribbon.
+
 #### Returns
 
 ggplot object
@@ -349,7 +361,8 @@ Plot VE with uncertainty bands from bootstrap
       color = "blue",
       alpha = 0.3,
       show_points = TRUE,
-      probs = c(0.025, 0.975)
+      probs = c(0.025, 0.975),
+      show_clean = TRUE
     )
 
 #### Arguments
@@ -394,6 +407,10 @@ Plot VE with uncertainty bands from bootstrap
 
   Vector of quantiles for confidence intervals (default is c(0.025,
   0.975))
+
+- `show_clean`:
+
+  See `plot_VE_with_uncertainty()` (default is TRUE)
 
 #### Returns
 

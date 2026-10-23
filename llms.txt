@@ -6,6 +6,7 @@ You can install the development version of `{VEinterpolation}` from
 GitHub:
 
 ``` r
+
 devtools::install_github("Epiconcept-Paris/VEBIS_EHR_VE_impact_study_interpolation")
 ```
 

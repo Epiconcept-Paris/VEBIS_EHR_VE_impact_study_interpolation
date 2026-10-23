@@ -1,6 +1,7 @@
 # Interpolate monthly data to weekly data
 
 ``` r
+
 library(VEinterpolation)
 library(ggplot2)
 library(dplyr)
@@ -26,6 +27,7 @@ We use a toy dataset provided in the package, containing 8-weeks
 estimates of vaccine effectiveness (VE) for 12 months.
 
 ``` r
+
 data("sample_8_weeks_data")
 
 head(sample_8_weeks_data)
@@ -39,6 +41,7 @@ head(sample_8_weeks_data)
 ```
 
 ``` r
+
 ggplot(sample_8_weeks_data, aes(x = date_min, y = 1 - estimate)) +
     geom_point() +
     geom_errorbar(aes(ymin = 1 - CIhigh, ymax = 1 - CIlow)) +
@@ -51,12 +54,14 @@ ggplot(sample_8_weeks_data, aes(x = date_min, y = 1 - estimate)) +
 ## Creating Individual Decay Models
 
 ``` r
+
 seed_to_use <- 666
 ```
 
 ### Exponential Decay Model
 
 ``` r
+
 # Create exponential model using the R6 class
 exponential_model <- DecayModel$new(
     name = "exponential",
@@ -86,6 +91,7 @@ exponential_result <- exponential_model$fit_to_determine_bic(
 ### Logistic Decay Model
 
 ``` r
+
 # Create logistic model using the R6 class
 logistic_model <- DecayModel$new(
     name = "logistic",
@@ -115,6 +121,7 @@ logistic_result <- logistic_model$fit_to_determine_bic(
 ## Visualizing Individual Models
 
 ``` r
+
 # Plot exponential model
 p1 <- exponential_model$plot_optimal(
     estimate = sample_8_weeks_data$estimate,
@@ -152,6 +159,7 @@ grid.arrange(p1, p2, ncol = 2)
 ## Comparing multiple models at once
 
 ``` r
+
 comparison_result <- compare_decay_models(
     model_names = c("exponential", "logistic"),
     estimate = sample_8_weeks_data$estimate,
@@ -182,6 +190,7 @@ cat("Best BIC:", best_model_bic$criterion, "\n")
 ## Model Comparison Plot
 
 ``` r
+
 # Create comparison plot using BIC criterion
 comparison_plot <- plot_model_comparison(
     comparison_result = comparison_result,
@@ -209,6 +218,7 @@ samples based on the bootstrap covariance matrix, providing uncertainty
 quantification:
 
 ``` r
+
 # Generate VE samples based on bootstrap fit
 best_model <- best_model_bic
 ve_samples <- best_model$model$generate_VE_based_on_resampling(
@@ -236,13 +246,14 @@ print(best_model$model$nlrob_samples[[1]])
 ### Get summary of VE samples
 
 ``` r
+
 ve_summary <- best_model$model$generate_VE_summary(
     periods_starts = sample_8_weeks_data$date_min,
     periods_ends = sample_8_weeks_data$date_max
 )
 
 print(ve_summary)
-#> # A tibble: 56 × 6
+#> # A tibble: 56 × 9
 #>    period_start VE_median VE_mean  VE_sd VE_quantile_025 VE_quantile_975
 #>    <date>           <dbl>   <dbl>  <dbl>           <dbl>           <dbl>
 #>  1 2023-10-01       0.711   0.706 0.0570           0.585           0.806
@@ -256,11 +267,14 @@ print(ve_summary)
 #>  9 2023-11-26       0.532   0.528 0.0707           0.361           0.652
 #> 10 2023-12-03       0.509   0.507 0.0783           0.334           0.651
 #> # ℹ 46 more rows
+#> # ℹ 3 more variables: VE_clean_median <dbl>, VE_clean_quantile_025 <dbl>,
+#> #   VE_clean_quantile_975 <dbl>
 ```
 
 ### VE with Uncertainty Bands
 
 ``` r
+
 # Plot VE with uncertainty bands
 uncertainty_plot <- best_model$model$plot_VE_with_uncertainty(
     periods_starts = sample_8_weeks_data$date_min,
@@ -275,6 +289,7 @@ print(uncertainty_plot)
 ### VE with Uncertainty Bands plus raw data
 
 ``` r
+
 ve_uncertainty_plot_plus_raw_data <- best_model$model$plot_VE_with_uncertainty_plus_raw_data(
     estimate = sample_8_weeks_data$estimate,
     ci_low = sample_8_weeks_data$CIlow,

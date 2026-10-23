@@ -10,12 +10,12 @@
 
 ## Citation
 
-Mansiaux Y, Blake A, Nunes B (2025). *VEinterpolation: VE interpolation
+Mansiaux Y, Blake A, Nunes B (2026). *VEinterpolation: VE interpolation
 package*. R package version 0.1.0.
 
     @Manual{,
       title = {VEinterpolation: VE interpolation package},
       author = {Yohann Mansiaux and Alexandre Blake and Baltazar Nunes},
-      year = {2025},
+      year = {2026},
       note = {R package version 0.1.0},
     }
